@@ -40,6 +40,22 @@ The reveal maps the known tickers (`TSLAx`, `AAPLx`, `NVDAx`, `SPYx`) to their e
 The machine launches with TSLAx only. Unknown symbols fall back to a spark, so a new
 ticker can't break the reveal.
 
+## Sound
+
+`sfx.ts` synthesizes every effect with Web Audio, so there are no audio files. Browsers
+keep audio locked until a user gesture, so nothing plays before the first tap or key
+press. `SoundToggle` mutes everything and remembers the choice in `localStorage`.
+
+| Moment | Sound |
+| --- | --- |
+| `drawing` starts | Coin |
+| Pack lands | Thud, plus a sparkle for Legendary |
+| Idle wobble | Foil crinkle, for the first 5 bursts only |
+| Tearing | A tick per tooth of the tear line, rising in pitch |
+| Strip comes off | Rip |
+| Card revealed | Arpeggio, or a longer fanfare for Legendary. None if there's no payout. |
+| `error` | Two falling notes |
+
 ## Preview
 
 `/preview` has every machine state plus Rare, Legendary, multi-stock and no-payout

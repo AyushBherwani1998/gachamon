@@ -5,6 +5,8 @@ import type { JSX } from "react";
 import { createPortal } from "react-dom";
 
 import { Confetti } from "./confetti";
+import { sfx } from "./sfx";
+import { SoundToggle } from "./sound-toggle";
 import type { GachaResult } from "./types";
 import { useTearGesture, type TearDirection } from "./use-tear-gesture";
 
@@ -17,6 +19,24 @@ const TOOTH = 3;
 const EASE_OUT = (t: number) => 1 - Math.pow(1 - t, 3);
 const EASE_IN_OUT = (t: number) =>
   t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+
+/** How long the pack rests after it lands, or after an abandoned tear. */
+const TEMPT_DELAY_MS = 900;
+const TEMPT_MS_PER_SWING = 85;
+const TEMPT_SETTLE_MS = 140;
+const LEGENDARY_RATTLE = 1.35;
+/** The wobble keeps going, but its sound stops before it can get annoying. */
+const TEMPT_SOUND_BURSTS = 5;
+/**
+ * The pack gets more restless the longer it's left alone, then holds at the
+ * last burst. `swings` are degrees from upright; `peek` lifts the foil strip
+ * (as tear progress) so each burst also points at where to tear.
+ */
+const TEMPT_BURSTS = [
+  { swings: [-1.2, 1.2, -0.6], peek: 0.06, rest: 1800 },
+  { swings: [-2, 2, -1.4, 0.8], peek: 0.1, rest: 1500 },
+  { swings: [-3, 3, -2.4, 2, -1.2, 0.6], peek: 0.14, rest: 1300 },
+] as const;
 
 const EMBLEMS: Record<string, string> = {
   TSLAx: "/sprites/emblem_tsla.png",
@@ -100,6 +120,7 @@ export function PackTear({
   const [tearing, setTearing] = useState(false);
 
   const groupRef = useRef<HTMLDivElement>(null);
+  const temptRef = useRef<HTMLDivElement>(null);
   const tiltRef = useRef<HTMLDivElement>(null);
   const peeledRef = useRef<HTMLImageElement>(null);
   const attachedRef = useRef<HTMLImageElement>(null);
@@ -107,6 +128,8 @@ export function PackTear({
   const continueRef = useRef<HTMLButtonElement>(null);
   const frame = useRef(0);
   const finishing = useRef(false);
+  const peeking = useRef(false);
+  const ripTooth = useRef(0);
   const lastDirection = useRef<TearDirection>(1);
 
   const packSrc = result.legendary
@@ -134,6 +157,14 @@ export function PackTear({
     tilt.style.transform = `rotate(${(progress * direction * 1.5).toFixed(2)}deg)`;
   };
 
+  // One tick per tooth of the tear line, so the sound follows the finger.
+  const playRip = (progress: number) => {
+    const tooth = Math.floor((progress * PACK_W) / TOOTH);
+    if (tooth <= ripTooth.current) return;
+    ripTooth.current = tooth;
+    sfx.rip(progress);
+  };
+
   const animate = (
     from: number,
     to: number,
@@ -146,7 +177,9 @@ export function PackTear({
     const startedAt = performance.now();
     const step = (now: number) => {
       const t = Math.min(1, (now - startedAt) / duration);
-      paint(from + (to - from) * ease(t), direction);
+      const progress = from + (to - from) * ease(t);
+      paint(progress, direction);
+      if (finishing.current) playRip(progress);
       if (t < 1) {
         frame.current = requestAnimationFrame(step);
       } else {
@@ -159,6 +192,7 @@ export function PackTear({
   const completeTear = (direction: TearDirection) => {
     const peeled = peeledRef.current;
     const group = groupRef.current;
+    sfx.tearDone();
     setTorn(true);
     if (!peeled || !group) return;
 
@@ -200,9 +234,18 @@ export function PackTear({
     enabled: !tearing && !reducedMotion,
     onGrab: () => {
       cancelAnimationFrame(frame.current);
+      ripTooth.current = 0;
+      // Drop an idle foil peek so the real tear starts from a closed pack.
+      if (peeking.current) {
+        peeking.current = false;
+        paint(0, 1);
+      }
       setGripped(true);
     },
-    onProgress: (progress, direction) => paint(progress, direction),
+    onProgress: (progress, direction) => {
+      paint(progress, direction);
+      playRip(progress);
+    },
     onFinish: (progress, direction) => finish(progress, direction, 110),
     onRelease: (progress) => {
       setGripped(false);
@@ -229,6 +272,63 @@ export function PackTear({
     return () => cancelAnimationFrame(frame.current);
   }, []);
 
+  // Idle wobble: short bursts with long rests, so it reads as the pack wanting
+  // to be opened rather than as a loading state. Stops as soon as it's touched.
+  const legendary = result.legendary;
+  useEffect(() => {
+    const tempt = temptRef.current;
+    if (!tempt || gripped || tearing || reducedMotion) return;
+
+    let burst = 0;
+    let running: Animation | null = null;
+    let timer = 0;
+
+    const playBurst = () => {
+      const { swings, peek, rest } =
+        TEMPT_BURSTS[Math.min(burst, TEMPT_BURSTS.length - 1)];
+      burst += 1;
+
+      const rattle = legendary ? LEGENDARY_RATTLE : 1;
+      if (burst <= TEMPT_SOUND_BURSTS && !document.hidden) {
+        sfx.rattle(swings.length, TEMPT_MS_PER_SWING / 1000, rattle);
+      }
+      const keyframes = [0, ...swings, 0].map((degrees) => ({
+        transform: `rotate(${degrees * rattle}deg)`,
+        easing: "cubic-bezier(0.37, 0, 0.63, 1)",
+      }));
+      running = tempt.animate(keyframes, {
+        duration: (swings.length + 1) * TEMPT_MS_PER_SWING,
+      });
+      running.onfinish = () => {
+        running = null;
+        timer = window.setTimeout(playBurst, rest);
+      };
+
+      peeking.current = true;
+      animate(0, peek, 160, EASE_OUT, 1, () => {
+        animate(peek, 0, 220, EASE_IN_OUT, 1, () => {
+          peeking.current = false;
+        });
+      });
+    };
+
+    timer = window.setTimeout(playBurst, TEMPT_DELAY_MS);
+
+    return () => {
+      window.clearTimeout(timer);
+      if (!running) return;
+      // Ease back from wherever the swing is, so a grab never makes it snap.
+      const current = getComputedStyle(tempt).transform;
+      running.cancel();
+      tempt.animate([{ transform: current }, { transform: "none" }], {
+        duration: TEMPT_SETTLE_MS,
+        easing: "cubic-bezier(0.23, 1, 0.32, 1)",
+      });
+    };
+    // `animate` only touches refs, so a stale closure of it is safe here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gripped, tearing, reducedMotion, legendary]);
+
   useEffect(() => {
     const onResize = () => setScale(packScale());
     window.addEventListener("resize", onResize);
@@ -246,6 +346,15 @@ export function PackTear({
   useEffect(() => {
     if (torn) continueRef.current?.focus({ preventScroll: true });
   }, [torn]);
+
+  const hasPayout = result.payouts.length > 0;
+  const revealSounded = useRef(false);
+  useEffect(() => {
+    if (!torn || revealSounded.current) return;
+    revealSounded.current = true;
+    // No fanfare when there's nothing to celebrate.
+    if (hasPayout) sfx.reveal(result.legendary);
+  }, [torn, hasPayout, result.legendary]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -284,6 +393,8 @@ export function PackTear({
       <p className="gm-live" aria-live="polite" aria-atomic="true">
         {announcement}
       </p>
+
+      <SoundToggle />
 
       {torn ? (
         <div className="gm-reveal">
@@ -341,46 +452,48 @@ export function PackTear({
         aria-hidden={torn ? "true" : undefined}
       >
         <div className="gm-packGrip" data-gripped={gripped ? "true" : undefined}>
-          <div ref={tiltRef} className="gm-packTilt">
-            <span className="gm-packMouth" aria-hidden="true" />
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              className="gm-sprite gm-fill"
-              style={{ clipPath: BODY_CLIP }}
-              src={packSrc}
-              alt=""
-              draggable={false}
-            />
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              ref={attachedRef}
-              className="gm-sprite gm-fill"
-              src={packSrc}
-              alt=""
-              draggable={false}
-            />
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              ref={peeledRef}
-              className="gm-sprite gm-fill"
-              src={packSrc}
-              alt=""
-              draggable={false}
-            />
-
-            {!torn ? (
-              <button
-                ref={hitRef}
-                type="button"
-                className="gm-packHit"
-                aria-label={`Tear open your ${tierName} pack`}
-                {...gesture}
-                onClick={(event) => {
-                  gesture.onClick(event);
-                  handleReducedOpen();
-                }}
+          <div ref={temptRef} className="gm-packTempt">
+            <div ref={tiltRef} className="gm-packTilt">
+              <span className="gm-packMouth" aria-hidden="true" />
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                className="gm-sprite gm-fill"
+                style={{ clipPath: BODY_CLIP }}
+                src={packSrc}
+                alt=""
+                draggable={false}
               />
-            ) : null}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                ref={attachedRef}
+                className="gm-sprite gm-fill"
+                src={packSrc}
+                alt=""
+                draggable={false}
+              />
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                ref={peeledRef}
+                className="gm-sprite gm-fill"
+                src={packSrc}
+                alt=""
+                draggable={false}
+              />
+
+              {!torn ? (
+                <button
+                  ref={hitRef}
+                  type="button"
+                  className="gm-packHit"
+                  aria-label={`Tear open your ${tierName} pack`}
+                  {...gesture}
+                  onClick={(event) => {
+                    gesture.onClick(event);
+                    handleReducedOpen();
+                  }}
+                />
+              ) : null}
+            </div>
           </div>
         </div>
 

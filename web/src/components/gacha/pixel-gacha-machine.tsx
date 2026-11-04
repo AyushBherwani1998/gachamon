@@ -6,6 +6,8 @@ import type { JSX } from "react";
 
 import "./gacha.css";
 import { emblemFor, PackTear } from "./pack-tear";
+import { sfx, unlockAudio } from "./sfx";
+import { SoundToggle } from "./sound-toggle";
 import type { GachaPhase, GachaResult } from "./types";
 import { useReducedMotion } from "./use-reduced-motion";
 
@@ -88,6 +90,26 @@ export function PixelGachaMachine({
   const continued = continuedKey === sessionKey;
   const overlayOpen = hasPack && overlayKey === sessionKey;
   const legendary = Boolean(result?.legendary);
+  const lastSound = useRef<string | null>(null);
+
+  // These stay registered: a phone can suspend audio again while the user is
+  // away in a wallet app, and only a new gesture can bring it back.
+  useEffect(() => {
+    const events = ["pointerup", "click", "keydown"] as const;
+    events.forEach((name) => window.addEventListener(name, unlockAudio, true));
+    return () => {
+      events.forEach((name) => window.removeEventListener(name, unlockAudio, true));
+    };
+  }, []);
+
+  // The ref keeps each sound to one play per state, even if the effect re-runs.
+  useEffect(() => {
+    if (lastSound.current === sessionKey) return;
+    lastSound.current = sessionKey;
+    if (phase === "drawing") sfx.coin();
+    else if (phase === "error") sfx.error();
+    else if (hasPack) sfx.drop(legendary);
+  }, [sessionKey, phase, hasPack, legendary]);
 
   useEffect(() => {
     if (!hasPack) return;
@@ -124,6 +146,8 @@ export function PixelGachaMachine({
       data-phase={phase}
       aria-label="Gachamon pack machine"
     >
+      <SoundToggle />
+
       <div className={`gm-machine ${isDrawing ? "gm-shake" : ""}`}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
