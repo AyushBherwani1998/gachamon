@@ -7,6 +7,7 @@ import { useAccount, useSwitchChain } from "wagmi";
 import { useAuthActions } from "@/components/auth-actions";
 import { BalancesPanel } from "@/components/balances-panel";
 import { PixelGachaMachine } from "@/components/gacha";
+import { haptic } from "@/components/gacha/haptics";
 import { NetworkBanner } from "@/components/network-banner";
 import {
   LiveFeed,
@@ -15,7 +16,7 @@ import {
   ResultCard,
   ShareButton,
 } from "@/components/panels";
-import { MenuSection, MobileMenu } from "@/components/mobile-menu";
+import { MenuSection, MobileMenu, VibrationToggle } from "@/components/mobile-menu";
 import { OwedPanel } from "@/components/owed-panel";
 import { PullButton } from "@/components/pull-button";
 import { TxLink } from "@/components/tx-link";
@@ -157,6 +158,7 @@ export default function Home() {
 
   const handlePrimary = () => {
     if (busy) return;
+    haptic.press();
     if (!demo && !isConnected) {
       signIn();
       return;
@@ -269,6 +271,7 @@ export default function Home() {
               <MenuSection title="Odds & EV">{oddsPanel}</MenuSection>
               <MenuSection title="Scan to play">{qrCard}</MenuSection>
               {shareButton}
+              <VibrationToggle />
               <SiteFooter />
             </MobileMenu>
           }

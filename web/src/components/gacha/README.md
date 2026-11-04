@@ -56,6 +56,15 @@ press. `SoundToggle` mutes everything and remembers the choice in `localStorage`
 | Card revealed | Arpeggio, or a longer fanfare for Legendary. None if there's no payout. |
 | `error` | Two falling notes |
 
+## Vibration
+
+`haptics.ts` adds matching vibration on touch devices through
+[`web-haptics`](https://haptics.lochie.me), plus a tap on the pull button and on
+grabbing the pack. The Vibration switch in the phone menu turns it off, separately from
+the mute button. Android uses `navigator.vibrate`. iOS has no vibration API, so the
+library clicks a hidden iOS switch, which is only expected to work during a real touch,
+so moments that happen without one (like the pack landing) may not be felt there.
+
 ## Preview
 
 `/preview` has every machine state plus Rare, Legendary, multi-stock and no-payout

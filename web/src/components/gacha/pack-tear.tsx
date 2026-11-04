@@ -5,6 +5,7 @@ import type { JSX } from "react";
 import { createPortal } from "react-dom";
 
 import { Confetti } from "./confetti";
+import { haptic } from "./haptics";
 import { sfx } from "./sfx";
 import { SoundToggle } from "./sound-toggle";
 import type { GachaResult } from "./types";
@@ -25,7 +26,7 @@ const TEMPT_DELAY_MS = 900;
 const TEMPT_MS_PER_SWING = 85;
 const TEMPT_SETTLE_MS = 140;
 const LEGENDARY_RATTLE = 1.35;
-/** The wobble keeps going, but its sound stops before it can get annoying. */
+/** The wobble keeps going, but its sound and buzz stop before they can get annoying. */
 const TEMPT_SOUND_BURSTS = 5;
 /**
  * The pack gets more restless the longer it's left alone, then holds at the
@@ -130,6 +131,7 @@ export function PackTear({
   const finishing = useRef(false);
   const peeking = useRef(false);
   const ripTooth = useRef(0);
+  const tearBuzzed = useRef(false);
   const lastDirection = useRef<TearDirection>(1);
 
   const packSrc = result.legendary
@@ -163,6 +165,8 @@ export function PackTear({
     if (tooth <= ripTooth.current) return;
     ripTooth.current = tooth;
     sfx.rip(progress);
+    // After the swipe's final buzz, another tick would cut it short.
+    if (!tearBuzzed.current) haptic.rip(progress);
   };
 
   const animate = (
@@ -222,6 +226,10 @@ export function PackTear({
     finishing.current = true;
     setTearing(true);
     setGripped(false);
+    // Fired here, not when the strip leaves: on letting go this is still inside
+    // the touch, which iOS needs, and the reveal's pattern can't cancel it.
+    tearBuzzed.current = true;
+    haptic.tearDone();
 
     if (reducedMotion) {
       setTorn(true);
@@ -235,6 +243,7 @@ export function PackTear({
     onGrab: () => {
       cancelAnimationFrame(frame.current);
       ripTooth.current = 0;
+      haptic.grab();
       // Drop an idle foil peek so the real tear starts from a closed pack.
       if (peeking.current) {
         peeking.current = false;
@@ -291,6 +300,7 @@ export function PackTear({
       const rattle = legendary ? LEGENDARY_RATTLE : 1;
       if (burst <= TEMPT_SOUND_BURSTS && !document.hidden) {
         sfx.rattle(swings.length, TEMPT_MS_PER_SWING / 1000, rattle);
+        haptic.rattle(swings.length, TEMPT_MS_PER_SWING, legendary);
       }
       const keyframes = [0, ...swings, 0].map((degrees) => ({
         transform: `rotate(${degrees * rattle}deg)`,
@@ -353,7 +363,10 @@ export function PackTear({
     if (!torn || revealSounded.current) return;
     revealSounded.current = true;
     // No fanfare when there's nothing to celebrate.
-    if (hasPayout) sfx.reveal(result.legendary);
+    if (hasPayout) {
+      sfx.reveal(result.legendary);
+      haptic.reveal(result.legendary);
+    }
   }, [torn, hasPayout, result.legendary]);
 
   useEffect(() => {

@@ -1,7 +1,14 @@
 "use client";
 
 import { Dialog } from "radix-ui";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
+
+import {
+  haptic,
+  isHapticsEnabled,
+  setHapticsEnabled,
+  subscribeHaptics,
+} from "@/components/gacha/haptics";
 
 /** Tailwind's `lg`: from here up the panels sit in columns beside the machine. */
 const DESKTOP_QUERY = "(min-width: 1024px)";
@@ -80,6 +87,31 @@ export function MobileMenu({
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
+  );
+}
+
+// The server can't know the saved choice, so the first render assumes it's on.
+const serverEnabled = () => true;
+
+/** Only shown on touch devices, the only place vibration runs. */
+export function VibrationToggle() {
+  const enabled = useSyncExternalStore(subscribeHaptics, isHapticsEnabled, serverEnabled);
+
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={enabled}
+      onClick={() => {
+        setHapticsEnabled(!enabled);
+        // Turning it off is its own confirmation; turning it on proves it works.
+        if (!enabled) haptic.press();
+      }}
+      className="retro hidden min-h-12 shrink-0 items-center justify-between gap-3 border-4 border-foreground bg-card px-3 text-[10px] pointer-coarse:flex"
+    >
+      Vibration
+      <span aria-hidden="true">{enabled ? "ON" : "OFF"}</span>
+    </button>
   );
 }
 

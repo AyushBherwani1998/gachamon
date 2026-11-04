@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import type { JSX } from "react";
 
 import "./gacha.css";
+import { haptic } from "./haptics";
 import { emblemFor, PackTear } from "./pack-tear";
 import { sfx, unlockAudio } from "./sfx";
 import { SoundToggle } from "./sound-toggle";
@@ -106,9 +107,16 @@ export function PixelGachaMachine({
   useEffect(() => {
     if (lastSound.current === sessionKey) return;
     lastSound.current = sessionKey;
-    if (phase === "drawing") sfx.coin();
-    else if (phase === "error") sfx.error();
-    else if (hasPack) sfx.drop(legendary);
+    if (phase === "drawing") {
+      sfx.coin();
+      haptic.coin();
+    } else if (phase === "error") {
+      sfx.error();
+      haptic.error();
+    } else if (hasPack) {
+      sfx.drop(legendary);
+      haptic.drop(legendary);
+    }
   }, [sessionKey, phase, hasPack, legendary]);
 
   useEffect(() => {
