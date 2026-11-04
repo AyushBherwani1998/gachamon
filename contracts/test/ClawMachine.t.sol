@@ -4,34 +4,29 @@ pragma solidity ^0.8.24;
 import {Test, console} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ClawMachine} from "../src/ClawMachine.sol";
+import {MockPriceFeed} from "../src/mocks/MockPriceFeed.sol";
 import {MockERC20} from "./mocks/MockERC20.sol";
 import {MockEntropy} from "./mocks/MockEntropy.sol";
-import {MockPyth} from "./mocks/MockPyth.sol";
 import {MockFailingToken} from "./mocks/MockFailingToken.sol";
 
 contract ClawMachineTest is Test {
     ClawMachine public claw;
     MockERC20 public usdc;
     MockEntropy public entropy;
-    MockPyth public pyth;
     MockERC20 public tsla;
     MockERC20 public nvda;
     MockERC20 public aapl;
     MockERC20 public spy;
+    MockPriceFeed public tslaFeed;
+    MockPriceFeed public nvdaFeed;
+    MockPriceFeed public aaplFeed;
+    MockPriceFeed public spyFeed;
 
     address public owner = address(0x1);
     address public player = address(0x3);
 
     uint256 constant PULL_PRICE = 1_000000; // 1 USDC
     uint256 constant ENTROPY_FEE = 0.001 ether;
-    uint256 constant PYTH_FEE = 0.0001 ether;
-    uint256 constant TOTAL_FEE = ENTROPY_FEE + PYTH_FEE;
-
-    // Pyth feed IDs (mock)
-    bytes32 constant TSLA_FEED_ID = bytes32(uint256(1));
-    bytes32 constant NVDA_FEED_ID = bytes32(uint256(2));
-    bytes32 constant AAPL_FEED_ID = bytes32(uint256(3));
-    bytes32 constant SPY_FEED_ID = bytes32(uint256(4));
 
     event PullRequested(
         uint256 indexed pullId,
@@ -54,31 +49,28 @@ contract ClawMachineTest is Test {
         // Deploy mocks
         usdc = new MockERC20("USDC", "USDC", 6);
         entropy = new MockEntropy();
-        pyth = new MockPyth();
         tsla = new MockERC20("TSLAx", "TSLAx", 18);
         nvda = new MockERC20("NVDAx", "NVDAx", 18);
         aapl = new MockERC20("AAPLx", "AAPLx", 18);
         spy = new MockERC20("SPYx", "SPYx", 18);
 
+        // Chainlink-style feeds: $250, $500, $150, $400 (8 decimals)
+        tslaFeed = new MockPriceFeed(250e8, 8);
+        nvdaFeed = new MockPriceFeed(500e8, 8);
+        aaplFeed = new MockPriceFeed(150e8, 8);
+        spyFeed = new MockPriceFeed(400e8, 8);
+
         // Deploy ClawMachine
         vm.prank(owner);
-        claw = new ClawMachine(
-            address(usdc),
-            address(entropy),
-            address(pyth),
-            owner
-        );
+        claw = new ClawMachine(address(usdc), address(entropy), owner);
 
-        // Setup tokens with feed IDs
+        // Setup tokens with their Chainlink feeds
         vm.startPrank(owner);
-        claw.addToken(address(tsla), TSLA_FEED_ID);
-        claw.addToken(address(nvda), NVDA_FEED_ID);
-        claw.addToken(address(aapl), AAPL_FEED_ID);
-        claw.addToken(address(spy), SPY_FEED_ID);
+        claw.addToken(address(tsla), address(tslaFeed));
+        claw.addToken(address(nvda), address(nvdaFeed));
+        claw.addToken(address(aapl), address(aaplFeed));
+        claw.addToken(address(spy), address(spyFeed));
         vm.stopPrank();
-
-        // Set mock Pyth prices
-        _setMockPrices();
 
         // Fund inventory (20 USDC worth of xStocks)
         tsla.mint(address(claw), 0.02 ether); // 0.02 TSLA * $250 = $5
@@ -91,28 +83,14 @@ contract ClawMachineTest is Test {
         vm.deal(player, 10 ether); // 10 MON for fees
     }
 
-    function _setMockPrices() internal {
-        // Set prices: $250, $500, $150, $400
-        // Pyth format: price * 1e8 (expo = -8)
-        pyth.setPrice(TSLA_FEED_ID, 25000000000, 1000000, -8, block.timestamp);
-        pyth.setPrice(NVDA_FEED_ID, 50000000000, 1000000, -8, block.timestamp);
-        pyth.setPrice(AAPL_FEED_ID, 15000000000, 1000000, -8, block.timestamp);
-        pyth.setPrice(SPY_FEED_ID, 40000000000, 1000000, -8, block.timestamp);
-    }
-
-    function _getEmptyPriceUpdate() internal pure returns (bytes[] memory) {
-        bytes[] memory updateData = new bytes[](0);
-        return updateData;
-    }
-
     function test_InitialState() public view {
         assertEq(address(claw.usdc()), address(usdc));
         assertEq(address(claw.entropy()), address(entropy));
-        assertEq(address(claw.pyth()), address(pyth));
         assertEq(claw.pullPrice(), PULL_PRICE);
         assertEq(claw.commonPayoutBps(), 7300);
         assertEq(claw.legendaryRarityBps(), 200);
         assertEq(claw.legendaryMultiplier(), 10);
+        assertEq(claw.maxPriceAge(), 3900);
         assertEq(claw.callbackGasLimit(), 500_000);
     }
 
@@ -123,15 +101,49 @@ contract ClawMachineTest is Test {
         assertLt(inventoryValue, 21_000000);
     }
 
+    function test_TokenPriceAndTimestamp() public view {
+        (uint256 price, uint256 updatedAt) = claw.getTokenPrice(address(tsla));
+        assertEq(price, 250_000000);
+        assertEq(updatedAt, block.timestamp);
+
+        // 1e18 token units of TSLAx is one share at the feed price.
+        assertEq(price, 250_000000);
+    }
+
+    function test_MultiplierConversion() public {
+        // SPYx-like multiplier: the wrapped feed is $400, so one whole SPYx is
+        // 400 / 1.007474 = 397.03 USD.
+        spy.setMultiplier(1007474e12);
+
+        (uint256 price, ) = claw.getTokenPrice(address(spy));
+        assertEq(price, (uint256(400e6) * 1e18) / 1007474e12);
+        assertApproxEqRel(price, 397_030_000, 0.0001e18, "converted SPYx price");
+
+        // Inventory uses the same converted price.
+        uint256 inventoryValue = claw.getInventoryValue();
+        assertApproxEqRel(inventoryValue, 19_912_914, 0.01e18, "inventory at converted price");
+    }
+
+    function test_ZeroAnswerReverts() public {
+        tslaFeed.setAnswer(0);
+        vm.expectRevert("Invalid price");
+        claw.getTokenPrice(address(tsla));
+    }
+
+    function test_NegativeAnswerReverts() public {
+        tslaFeed.setAnswer(-1);
+        vm.expectRevert("Invalid price");
+        claw.getTokenPrice(address(tsla));
+    }
+
     function test_CommonPull() public {
         // Approve USDC
         vm.prank(player);
         usdc.approve(address(claw), PULL_PRICE);
 
         // Pull
-        bytes[] memory priceUpdate = _getEmptyPriceUpdate();
         vm.prank(player);
-        uint256 pullId = claw.pull{value: TOTAL_FEE}(bytes32(uint256(12345)), priceUpdate);
+        uint256 pullId = claw.pull{value: ENTROPY_FEE}(bytes32(uint256(12345)));
 
         assertEq(pullId, 0);
         assertEq(usdc.balanceOf(address(claw)), PULL_PRICE);
@@ -160,9 +172,8 @@ contract ClawMachineTest is Test {
         usdc.approve(address(claw), PULL_PRICE);
 
         // Pull
-        bytes[] memory priceUpdate = _getEmptyPriceUpdate();
         vm.prank(player);
-        uint256 pullId = claw.pull{value: TOTAL_FEE}(bytes32(uint256(12345)), priceUpdate);
+        uint256 pullId = claw.pull{value: ENTROPY_FEE}(bytes32(uint256(12345)));
 
         uint256 playerBalanceBefore = tsla.balanceOf(player) + nvda.balanceOf(player) + 
                                       aapl.balanceOf(player) + spy.balanceOf(player);
@@ -194,34 +205,30 @@ contract ClawMachineTest is Test {
         vm.prank(player);
         usdc.approve(address(claw), PULL_PRICE);
 
-        bytes[] memory priceUpdate = _getEmptyPriceUpdate();
         vm.prank(player);
         vm.expectRevert("Insufficient inventory");
-        claw.pull{value: TOTAL_FEE}(bytes32(uint256(12345)), priceUpdate);
+        claw.pull{value: ENTROPY_FEE}(bytes32(uint256(12345)));
     }
 
     function test_StalePriceBlocksPull() public {
-        // Fast forward past max price age (60 seconds)
-        vm.warp(block.timestamp + 61);
+        // Chainlink heartbeat is 3600s; maxPriceAge defaults to 3900s.
+        vm.warp(block.timestamp + 3901);
 
         vm.prank(player);
         usdc.approve(address(claw), PULL_PRICE);
 
-        bytes[] memory priceUpdate = _getEmptyPriceUpdate();
         vm.prank(player);
-        vm.expectRevert();
-        claw.pull{value: TOTAL_FEE}(bytes32(uint256(12345)), priceUpdate);
+        vm.expectRevert("Price too stale");
+        claw.pull{value: ENTROPY_FEE}(bytes32(uint256(12345)));
     }
 
     function test_FailedTransferCreatesOwedBalance() public {
         // Deploy a token that can fail transfers
         MockFailingToken failToken = new MockFailingToken("FAILx", "FAILx");
-        
-        vm.prank(owner);
-        claw.addToken(address(failToken), bytes32(uint256(999)));
+        MockPriceFeed failFeed = new MockPriceFeed(100e8, 8);
 
-        // Set price
-        pyth.setPrice(bytes32(uint256(999)), 10000000000, 1000000, -8, block.timestamp);
+        vm.prank(owner);
+        claw.addToken(address(failToken), address(failFeed));
 
         failToken.mint(address(claw), 1 ether);
 
@@ -232,9 +239,8 @@ contract ClawMachineTest is Test {
         vm.prank(player);
         usdc.approve(address(claw), PULL_PRICE);
 
-        bytes[] memory priceUpdate = _getEmptyPriceUpdate();
         vm.prank(player);
-        uint256 pullId = claw.pull{value: TOTAL_FEE}(bytes32(uint256(12345)), priceUpdate);
+        uint256 pullId = claw.pull{value: ENTROPY_FEE}(bytes32(uint256(12345)));
 
         // Fulfill
         entropy.fulfillWithRoll(1, 500);
@@ -272,9 +278,8 @@ contract ClawMachineTest is Test {
         vm.prank(player);
         usdc.approve(address(claw), PULL_PRICE);
 
-        bytes[] memory priceUpdate = _getEmptyPriceUpdate();
         vm.prank(player);
-        claw.pull{value: TOTAL_FEE}(bytes32(uint256(12345)), priceUpdate);
+        claw.pull{value: ENTROPY_FEE}(bytes32(uint256(12345)));
 
         uint256 treasuryAfterPull = usdc.balanceOf(address(claw));
         assertEq(treasuryAfterPull, treasuryBefore + PULL_PRICE);
@@ -299,9 +304,8 @@ contract ClawMachineTest is Test {
         vm.prank(player);
         usdc.approve(address(claw), PULL_PRICE);
 
-        bytes[] memory priceUpdate = _getEmptyPriceUpdate();
         vm.prank(player);
-        claw.pull{value: TOTAL_FEE}(bytes32(uint256(12345)), priceUpdate);
+        claw.pull{value: ENTROPY_FEE}(bytes32(uint256(12345)));
 
         // Should have reserved 10 USDC worth
         assertEq(claw.getPendingReservations(), 10_000000);
@@ -335,55 +339,49 @@ contract ClawMachineTest is Test {
         vm.prank(player);
         usdc.approve(address(claw), PULL_PRICE);
 
-        bytes[] memory priceUpdate = _getEmptyPriceUpdate();
         vm.prank(player);
         vm.expectRevert();
-        claw.pull{value: TOTAL_FEE}(bytes32(uint256(12345)), priceUpdate);
+        claw.pull{value: ENTROPY_FEE}(bytes32(uint256(12345)));
 
         vm.prank(owner);
         claw.unpause();
 
         // Should work now
         vm.prank(player);
-        claw.pull{value: TOTAL_FEE}(bytes32(uint256(12345)), priceUpdate);
+        claw.pull{value: ENTROPY_FEE}(bytes32(uint256(12345)));
     }
 
     function test_InsufficientFeeReverts() public {
         vm.prank(player);
         usdc.approve(address(claw), PULL_PRICE);
 
-        bytes[] memory priceUpdate = _getEmptyPriceUpdate();
         vm.prank(player);
         vm.expectRevert("Insufficient fee");
-        claw.pull{value: TOTAL_FEE / 2}(bytes32(uint256(12345)), priceUpdate);
+        claw.pull{value: ENTROPY_FEE / 2}(bytes32(uint256(12345)));
     }
 
     function test_GetFees() public view {
-        bytes[] memory priceUpdate = _getEmptyPriceUpdate();
-        uint256 pythFee = claw.getPythFee(priceUpdate);
         uint256 entropyFee = claw.getEntropyFee();
-        uint256 totalFee = claw.getTotalFee(priceUpdate);
-        
-        assertEq(pythFee, PYTH_FEE);
+        uint256 totalFee = claw.getFee();
+
         assertEq(entropyFee, ENTROPY_FEE);
-        assertEq(totalFee, TOTAL_FEE);
+        assertEq(totalFee, ENTROPY_FEE);
     }
 
     function test_ExcessMONRefunded() public {
         uint256 excessMON = 0.1 ether;
-        uint256 totalSent = TOTAL_FEE + excessMON;
+        uint256 totalSent = ENTROPY_FEE + excessMON;
 
         vm.prank(player);
         usdc.approve(address(claw), PULL_PRICE);
 
         uint256 balanceBefore = player.balance;
-        bytes[] memory priceUpdate = _getEmptyPriceUpdate();
         vm.prank(player);
-        claw.pull{value: totalSent}(bytes32(uint256(12345)), priceUpdate);
+        claw.pull{value: totalSent}(bytes32(uint256(12345)));
         uint256 balanceAfter = player.balance;
 
         // Should have been refunded the excess
-        assertEq(balanceBefore - balanceAfter, TOTAL_FEE);
+        assertEq(balanceBefore - balanceAfter, ENTROPY_FEE);
     }
 
     function test_OwnerCanSetMaxPriceAge() public {
@@ -422,9 +420,8 @@ contract ClawMachineTest is Test {
         vm.prank(player);
         usdc.approve(address(claw), PULL_PRICE);
 
-        bytes[] memory priceUpdate = _getEmptyPriceUpdate();
         vm.prank(player);
-        claw.pull{value: TOTAL_FEE}(bytes32(uint256(12345)), priceUpdate);
+        claw.pull{value: ENTROPY_FEE}(bytes32(uint256(12345)));
 
         assertEq(entropy.lastGasLimit(), 650_000);
     }
@@ -433,9 +430,8 @@ contract ClawMachineTest is Test {
         vm.prank(player);
         usdc.approve(address(claw), PULL_PRICE);
 
-        bytes[] memory priceUpdate = _getEmptyPriceUpdate();
         vm.prank(player);
-        uint256 pullId = claw.pull{value: TOTAL_FEE}(bytes32(uint256(12345)), priceUpdate);
+        uint256 pullId = claw.pull{value: ENTROPY_FEE}(bytes32(uint256(12345)));
 
         uint256 playerBalanceDuringPull = usdc.balanceOf(player);
         assertEq(claw.getPendingReservations(), 10_000000);
@@ -460,9 +456,8 @@ contract ClawMachineTest is Test {
         vm.prank(player);
         usdc.approve(address(claw), PULL_PRICE);
 
-        bytes[] memory priceUpdate = _getEmptyPriceUpdate();
         vm.prank(player);
-        uint256 pullId = claw.pull{value: TOTAL_FEE}(bytes32(uint256(12345)), priceUpdate);
+        uint256 pullId = claw.pull{value: ENTROPY_FEE}(bytes32(uint256(12345)));
 
         vm.warp(block.timestamp + 10 minutes - 1);
 
@@ -475,9 +470,8 @@ contract ClawMachineTest is Test {
         vm.prank(player);
         usdc.approve(address(claw), PULL_PRICE);
 
-        bytes[] memory priceUpdate = _getEmptyPriceUpdate();
         vm.prank(player);
-        uint256 pullId = claw.pull{value: TOTAL_FEE}(bytes32(uint256(12345)), priceUpdate);
+        uint256 pullId = claw.pull{value: ENTROPY_FEE}(bytes32(uint256(12345)));
 
         vm.warp(block.timestamp + 10 minutes);
 
@@ -490,9 +484,8 @@ contract ClawMachineTest is Test {
         vm.prank(player);
         usdc.approve(address(claw), PULL_PRICE);
 
-        bytes[] memory priceUpdate = _getEmptyPriceUpdate();
         vm.prank(player);
-        uint256 pullId = claw.pull{value: TOTAL_FEE}(bytes32(uint256(12345)), priceUpdate);
+        uint256 pullId = claw.pull{value: ENTROPY_FEE}(bytes32(uint256(12345)));
 
         entropy.fulfillWithRoll(1, 500);
         vm.warp(block.timestamp + 10 minutes);
@@ -512,9 +505,8 @@ contract ClawMachineTest is Test {
         vm.prank(player);
         usdc.approve(address(claw), PULL_PRICE);
 
-        bytes[] memory priceUpdate = _getEmptyPriceUpdate();
         vm.prank(player);
-        uint256 pullId = claw.pull{value: TOTAL_FEE}(bytes32(uint256(12345)), priceUpdate);
+        uint256 pullId = claw.pull{value: ENTROPY_FEE}(bytes32(uint256(12345)));
 
         vm.warp(block.timestamp + 10 minutes);
 
@@ -530,13 +522,12 @@ contract ClawMachineTest is Test {
         vm.prank(player);
         usdc.approve(address(claw), PULL_PRICE);
 
-        bytes[] memory priceUpdate = _getEmptyPriceUpdate();
         vm.prank(player);
-        uint256 pullId = claw.pull{value: TOTAL_FEE}(bytes32(uint256(12345)), priceUpdate);
+        uint256 pullId = claw.pull{value: ENTROPY_FEE}(bytes32(uint256(12345)));
 
         // Check price snapshot was stored
         uint256 tslaPrice = claw.getPullPriceSnapshot(pullId, address(tsla));
-        assertGt(tslaPrice, 0, "TSLA price should be snapshotted");
+        assertEq(tslaPrice, 250_000000, "TSLA price snapshotted");
     }
 
     // ============ Inventory-capped payouts ============
@@ -550,9 +541,8 @@ contract ClawMachineTest is Test {
         vm.prank(player);
         usdc.approve(address(claw), PULL_PRICE);
 
-        bytes[] memory priceUpdate = _getEmptyPriceUpdate();
         vm.prank(player);
-        uint256 pullId = claw.pull{value: TOTAL_FEE}(bytes32(uint256(12345)), priceUpdate);
+        uint256 pullId = claw.pull{value: ENTROPY_FEE}(bytes32(uint256(12345)));
 
         entropy.fulfillWithRoll(1, 500);
 
@@ -570,9 +560,8 @@ contract ClawMachineTest is Test {
         vm.prank(player);
         usdc.approve(address(claw), PULL_PRICE);
 
-        bytes[] memory priceUpdate = _getEmptyPriceUpdate();
         vm.prank(player);
-        uint256 pullId = claw.pull{value: TOTAL_FEE}(bytes32(uint256(12345)), priceUpdate);
+        uint256 pullId = claw.pull{value: ENTROPY_FEE}(bytes32(uint256(12345)));
 
         // Drain after the pull, then leave a lopsided but sufficient inventory.
         _drainInventory();
@@ -595,13 +584,36 @@ contract ClawMachineTest is Test {
         );
     }
 
+    function test_CappedPayoutsThreeTokens() public {
+        // Only TSLAx, NVDAx and SPYx are supported.
+        vm.prank(owner);
+        claw.removeToken(address(aapl));
+
+        vm.prank(player);
+        usdc.approve(address(claw), PULL_PRICE);
+
+        vm.prank(player);
+        uint256 pullId = claw.pull{value: ENTROPY_FEE}(bytes32(uint256(12345)));
+
+        _drainInventory();
+        tsla.mint(address(claw), 0.00004 ether); // 0.01 USD
+        nvda.mint(address(claw), 0.0006 ether); // 0.30 USD
+        spy.mint(address(claw), 0.0025 ether); // 1.00 USD
+
+        entropy.fulfillWithRoll(1, _findLargeFirstAllocationRoll());
+
+        assertEq(tsla.balanceOf(player), 0.00004 ether, "capped at TSLAx balance");
+        assertEq(aapl.balanceOf(player), 0, "removed token pays nothing");
+        _assertNoOwed();
+        assertApproxEqRel(_playerPayoutValue(pullId), 730_000, 0.01e18, "full 3-token payout");
+    }
+
     function test_AllTokensEmptyFallsBackToOwed() public {
         vm.prank(player);
         usdc.approve(address(claw), PULL_PRICE);
 
-        bytes[] memory priceUpdate = _getEmptyPriceUpdate();
         vm.prank(player);
-        uint256 pullId = claw.pull{value: TOTAL_FEE}(bytes32(uint256(12345)), priceUpdate);
+        uint256 pullId = claw.pull{value: ENTROPY_FEE}(bytes32(uint256(12345)));
 
         // Inventory disappears between the request and the callback.
         _drainInventory();
@@ -619,9 +631,8 @@ contract ClawMachineTest is Test {
         vm.prank(player);
         usdc.approve(address(claw), PULL_PRICE);
 
-        bytes[] memory priceUpdate = _getEmptyPriceUpdate();
         vm.prank(player);
-        uint256 pullId = claw.pull{value: TOTAL_FEE}(bytes32(uint256(12345)), priceUpdate);
+        uint256 pullId = claw.pull{value: ENTROPY_FEE}(bytes32(uint256(12345)));
 
         // Exactly 0.73 USD of SPY ($400): 730_000 * 1e18 / 400_000_000.
         _drainInventory();
