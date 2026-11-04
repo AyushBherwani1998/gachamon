@@ -618,6 +618,27 @@ contract ClawMachineTest is Test {
         machine._entropyCallback(1, address(0), COMMON_RANDOM);
     }
 
+    function testCallbackMustUseStoredProvider() public {
+        uint256 pullId = _pull(PLAYER, machine.getFee());
+        uint64 sequenceNumber = machine.getPull(pullId).sequenceNumber;
+
+        // Same sequence from a different provider must be ignored.
+        entropy.deliverWithProvider(address(machine), STRANGER, sequenceNumber, COMMON_RANDOM);
+        assertEq(
+            uint256(machine.getPull(pullId).status),
+            uint256(ClawMachine.PullStatus.Pending),
+            "wrong provider ignored"
+        );
+
+        // The default provider resolves it.
+        entropy.fulfill(sequenceNumber, COMMON_RANDOM);
+        assertEq(
+            uint256(machine.getPull(pullId).status),
+            uint256(ClawMachine.PullStatus.Resolved),
+            "correct provider resolves"
+        );
+    }
+
     function testUnknownSequenceIsIgnored() public {
         entropy.deliver(address(machine), 999, COMMON_RANDOM);
         assertEq(machine.totalPulls(), 0, "nothing resolved");

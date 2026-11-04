@@ -91,4 +91,14 @@ contract MockEntropy is IEntropyV2 {
     function deliver(address consumer, uint64 sequenceNumber, bytes32 randomNumber) external {
         IEntropyConsumer(consumer)._entropyCallback(sequenceNumber, address(this), randomNumber);
     }
+
+    /// @notice Deliver a callback with an arbitrary provider (used to test provider keying).
+    function deliverWithProvider(
+        address consumer,
+        address provider,
+        uint64 sequenceNumber,
+        bytes32 randomNumber
+    ) external {
+        IEntropyConsumer(consumer)._entropyCallback(sequenceNumber, provider, randomNumber);
+    }
 }

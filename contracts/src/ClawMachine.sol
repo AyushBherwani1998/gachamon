@@ -79,7 +79,7 @@ contract ClawMachine is IEntropyConsumer, Ownable, ReentrancyGuard {
     uint256 public reservedValueUsd6;
 
     mapping(uint256 => Pull) private _pulls;
-    mapping(uint64 => uint256) private _pullIdBySequence;
+    mapping(address => mapping(uint64 => uint256)) private _pullIdByProviderSequence;
     mapping(uint256 => uint256) private _pullReservedValue;
 
     // Per-pull config snapshots: setPullConfig must not change in-flight pulls.
@@ -190,6 +190,7 @@ contract ClawMachine is IEntropyConsumer, Ownable, ReentrancyGuard {
 
         IERC20(usdc).safeTransferFrom(msg.sender, address(this), pullPrice);
 
+        address provider = IEntropyV2(entropy).getDefaultProvider();
         uint64 sequenceNumber = IEntropyV2(entropy).requestV2{value: fee}(callbackGasLimit);
 
         _pulls[pullId] = Pull({
@@ -201,7 +202,7 @@ contract ClawMachine is IEntropyConsumer, Ownable, ReentrancyGuard {
             resolvedAt: 0,
             valueUsd6: 0
         });
-        _pullIdBySequence[sequenceNumber] = pullId;
+        _pullIdByProviderSequence[provider][sequenceNumber] = pullId;
 
         emit PullRequested(pullId, msg.sender, sequenceNumber, fee);
 
@@ -292,8 +293,11 @@ contract ClawMachine is IEntropyConsumer, Ownable, ReentrancyGuard {
     }
 
     /// @dev Called by the Entropy contract after the random number is revealed.
-    function entropyCallback(uint64 sequence, address, bytes32 randomNumber) internal override {
-        uint256 pullId = _pullIdBySequence[sequence];
+    function entropyCallback(uint64 sequence, address provider, bytes32 randomNumber)
+        internal
+        override
+    {
+        uint256 pullId = _pullIdByProviderSequence[provider][sequence];
         if (pullId == 0) return;
 
         Pull storage currentPull = _pulls[pullId];
