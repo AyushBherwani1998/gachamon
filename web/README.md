@@ -161,6 +161,41 @@ src/
 stable props contract (`phase`, `legendary`, `label`). The pixel-polish PR
 replaces its internals without touching the page wiring.
 
+## Panels preview
+
+`/preview/panels` renders every result/feed/share panel against realistic mock
+data, including the loading, empty and error states. Run `bun run dev` and open
+<http://localhost:3000/preview/panels>. The route is a static preview: it never
+touches the chain.
+
+The panels live in `src/components/panels` and are presentational. They take
+plain props, contain no wagmi or RPC calls, and can be dropped anywhere:
+
+```tsx
+import {
+  LiveFeed,
+  OddsPanel,
+  QrCard,
+  ResultCard,
+  ShareButton,
+  type FeedItem,
+  type PanelPayout,
+} from "@/components/panels";
+```
+
+| Component | Use |
+| --- | --- |
+| `ResultCard` | Resolved pull: rarity badge, per-stock payout rows, total USD, explorer link, pull-again and share-to-X actions. |
+| `OddsPanel` | 98/2 odds, computed EV and house edge, inventory and total pulls. Shows a skeleton while `loading`. |
+| `LiveFeed` | Newest-first ring-buffer feed (`FeedItem[]`), shortened addresses, relative time, legendary highlight, explorer links. Accepts `loading` and `error`. |
+| `ShareButton` | Opens an X intent in a new tab. Pass `text` and `url`; an empty `url` falls back to the current origin after hydration. Optional `label` defaults to "Share my pull". |
+| `QrCard` | Large high-contrast QR of the live URL. The QR is generated locally with `qrcode` (no external image service). |
+
+All USD values and token amounts are pre-formatted strings (`PanelPayout.usd`,
+`valueUsd`), so the calling hooks decide the precision. `explorerBase` should be
+`https://monadscan.com` on mainnet or `https://testnet.monadscan.com` on
+testnet.
+
 ## Deploying to Vercel
 
 - Root directory: `web`
