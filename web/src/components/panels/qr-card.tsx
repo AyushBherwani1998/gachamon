@@ -32,11 +32,7 @@ export function QrCard({
   url: string;
   caption?: string;
 }) {
-  const [result, setResult] = useState<QrResult>({
-    url: "",
-    png: null,
-    failed: false,
-  });
+  const [result, setResult] = useState<QrResult | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -59,7 +55,7 @@ export function QrCard({
     };
   }, [url]);
 
-  const current = result.url === url ? result : null;
+  const current = result?.url === url ? result : null;
   const png = current?.png ?? null;
   const failed = current?.failed ?? false;
 

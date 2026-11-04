@@ -84,7 +84,7 @@ export function OddsPanel({
       <CardHeader font="normal">
         <PanelHeader
           eyebrow="House math, in the open"
-          title="Odds & expected value"
+          title="Odds & EV"
           tag={
             <PanelTag tone={loading ? "muted" : "gold"}>
               {loading ? "Syncing" : "On-chain"}
@@ -158,7 +158,7 @@ export function OddsPanel({
                 <tr className="border-t-2 border-foreground/10">
                   <th scope="row" className="py-2.5 text-left font-normal">
                     <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                      <span className="retro text-[8px] text-emerald-300">
+                      <span className="retro text-[8px] uppercase text-emerald-300">
                         Common
                       </span>
                       <span className="font-mono text-xs tabular-nums text-foreground">
@@ -178,7 +178,7 @@ export function OddsPanel({
                 <tr className="border-t-2 border-foreground/10">
                   <th scope="row" className="py-2.5 text-left font-normal">
                     <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                      <span className="retro text-[8px] text-amber-300">
+                      <span className="retro text-[8px] uppercase text-amber-300">
                         Legendary
                       </span>
                       <span className="font-mono text-xs tabular-nums text-foreground">
