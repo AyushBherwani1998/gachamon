@@ -7,7 +7,8 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
-import {IEntropy, IEntropyConsumer} from "./interfaces/IEntropy.sol";
+import {IEntropyV2} from "./pyth/IEntropyV2.sol";
+import {IEntropyConsumer} from "./pyth/IEntropyConsumer.sol";
 import {IPyth} from "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
 import {PythStructs} from "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
 
@@ -59,6 +60,8 @@ contract ClawMachine is IEntropyConsumer, ReentrancyGuard, Pausable, Ownable {
 
     event MaxPriceAgeUpdated(uint256 oldMaxAge, uint256 newMaxAge);
 
+    event CallbackGasLimitUpdated(uint32 oldLimit, uint32 newLimit);
+
     // ============ Structs ============
 
     struct Pull {
@@ -80,7 +83,7 @@ contract ClawMachine is IEntropyConsumer, ReentrancyGuard, Pausable, Ownable {
 
     // Core contracts
     IERC20 public immutable usdc;
-    IEntropy public immutable entropy;
+    IEntropyV2 public immutable entropy;
     address public immutable entropyProvider;
     IPyth public immutable pyth;
 
@@ -90,6 +93,10 @@ contract ClawMachine is IEntropyConsumer, ReentrancyGuard, Pausable, Ownable {
     uint16 public legendaryRarityBps = 200; // 2% chance (200/10000)
     uint16 public legendaryMultiplier = 10; // 10x payout
     uint256 public maxPriceAge = 60; // 60 seconds (configurable for after-hours)
+
+    // Gas forwarded to the Entropy callback. Monad cold storage is expensive and gas is
+    // charged on the limit, so this is a deliberate, owner-tunable tradeoff.
+    uint32 public callbackGasLimit = 500_000;
 
     // Tokens and feed IDs
     address[] public supportedTokens;
@@ -124,8 +131,8 @@ contract ClawMachine is IEntropyConsumer, ReentrancyGuard, Pausable, Ownable {
         require(_pyth != address(0), "Invalid Pyth");
 
         usdc = IERC20(_usdc);
-        entropy = IEntropy(_entropy);
-        entropyProvider = IEntropy(_entropy).getDefaultProvider();
+        entropy = IEntropyV2(_entropy);
+        entropyProvider = IEntropyV2(_entropy).getDefaultProvider();
         pyth = IPyth(_pyth);
     }
 
@@ -148,7 +155,7 @@ contract ClawMachine is IEntropyConsumer, ReentrancyGuard, Pausable, Ownable {
     {
         // Get fees
         uint256 pythFee = pyth.getUpdateFee(priceUpdateData);
-        uint256 entropyFee = entropy.getFeeV2(entropyProvider);
+        uint256 entropyFee = entropy.getFeeV2(entropyProvider, callbackGasLimit);
         uint256 totalFee = pythFee + entropyFee;
         
         require(msg.value >= totalFee, "Insufficient fee");
@@ -189,7 +196,7 @@ contract ClawMachine is IEntropyConsumer, ReentrancyGuard, Pausable, Ownable {
         uint64 sequenceNumber = entropy.requestV2{value: entropyFee}(
             entropyProvider,
             userRandomNumber,
-            true // use blockhash
+            callbackGasLimit
         );
 
         // Record pull and snapshot prices
@@ -240,17 +247,15 @@ contract ClawMachine is IEntropyConsumer, ReentrancyGuard, Pausable, Ownable {
 
     /**
      * @notice Callback function called by Pyth Entropy
+     * @dev Reached through IEntropyConsumer._entropyCallback, which verifies msg.sender
      * @dev This function must stay within gas limits (Monad charges by gas LIMIT)
-     * @dev Recommended callback gas limit: 100,000+ to cover up to 4 ERC-20 transfers
      * @dev Uses price snapshot from pull request time
      */
     function entropyCallback(
         uint64 sequenceNumber,
         address, /* provider */
         bytes32 randomNumber
-    ) external override {
-        require(msg.sender == address(entropy), "Only entropy");
-
+    ) internal override {
         uint256 pullId = sequenceToPullId[sequenceNumber];
         Pull storage pullData = pulls[pullId];
         
@@ -343,14 +348,14 @@ contract ClawMachine is IEntropyConsumer, ReentrancyGuard, Pausable, Ownable {
      * @notice Get the Entropy fee
      */
     function getEntropyFee() external view returns (uint256) {
-        return entropy.getFeeV2(entropyProvider);
+        return entropy.getFeeV2(entropyProvider, callbackGasLimit);
     }
 
     /**
      * @notice Get total fee for pull (Pyth + Entropy)
      */
     function getTotalFee(bytes[] calldata priceUpdateData) external view returns (uint256) {
-        return pyth.getUpdateFee(priceUpdateData) + entropy.getFeeV2(entropyProvider);
+        return pyth.getUpdateFee(priceUpdateData) + entropy.getFeeV2(entropyProvider, callbackGasLimit);
     }
 
     /**
@@ -543,6 +548,17 @@ contract ClawMachine is IEntropyConsumer, ReentrancyGuard, Pausable, Ownable {
     }
 
     /**
+     * @notice Set the gas limit forwarded to the Entropy callback
+     * @dev Monad charges gas on the limit, so keep this just high enough for the callback
+     */
+    function setCallbackGasLimit(uint32 newLimit) external onlyOwner {
+        require(newLimit >= 100_000 && newLimit <= 1_500_000, "Invalid gas limit");
+        uint32 oldLimit = callbackGasLimit;
+        callbackGasLimit = newLimit;
+        emit CallbackGasLimitUpdated(oldLimit, newLimit);
+    }
+
+    /**
      * @notice Pause the contract
      */
     function pause() external onlyOwner {
@@ -557,6 +573,13 @@ contract ClawMachine is IEntropyConsumer, ReentrancyGuard, Pausable, Ownable {
     }
 
     // ============ Internal Functions ============
+
+    /**
+     * @notice Entropy contract address used by IEntropyConsumer to authenticate callbacks
+     */
+    function getEntropy() internal view override returns (address) {
+        return address(entropy);
+    }
 
     /**
      * @notice Convert Pyth price to USDC (6 decimals) per 1e18 token units

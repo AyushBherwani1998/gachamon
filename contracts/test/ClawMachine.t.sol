@@ -110,6 +110,7 @@ contract ClawMachineTest is Test {
         assertEq(claw.commonPayoutBps(), 7300);
         assertEq(claw.legendaryRarityBps(), 200);
         assertEq(claw.legendaryMultiplier(), 10);
+        assertEq(claw.callbackGasLimit(), 500_000);
     }
 
     function test_InventoryValue() public view {
@@ -387,6 +388,42 @@ contract ClawMachineTest is Test {
         claw.setMaxPriceAge(300); // 5 minutes
 
         assertEq(claw.maxPriceAge(), 300);
+    }
+
+    function test_OwnerCanSetCallbackGasLimit() public {
+        vm.prank(owner);
+        claw.setCallbackGasLimit(750_000);
+
+        assertEq(claw.callbackGasLimit(), 750_000);
+    }
+
+    function test_CallbackGasLimitBounds() public {
+        vm.startPrank(owner);
+        vm.expectRevert("Invalid gas limit");
+        claw.setCallbackGasLimit(99_999);
+        vm.expectRevert("Invalid gas limit");
+        claw.setCallbackGasLimit(1_500_001);
+        vm.stopPrank();
+    }
+
+    function test_OnlyOwnerCanSetCallbackGasLimit() public {
+        vm.prank(player);
+        vm.expectRevert();
+        claw.setCallbackGasLimit(600_000);
+    }
+
+    function test_PullForwardsCallbackGasLimit() public {
+        vm.prank(owner);
+        claw.setCallbackGasLimit(650_000);
+
+        vm.prank(player);
+        usdc.approve(address(claw), PULL_PRICE);
+
+        bytes[] memory priceUpdate = _getEmptyPriceUpdate();
+        vm.prank(player);
+        claw.pull{value: TOTAL_FEE}(bytes32(uint256(12345)), priceUpdate);
+
+        assertEq(entropy.lastGasLimit(), 650_000);
     }
 
     function test_PriceSnapshotStored() public {
