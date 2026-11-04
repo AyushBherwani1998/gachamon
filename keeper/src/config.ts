@@ -1,4 +1,4 @@
-import { defineChain, isAddress, type Address, type Chain } from "viem";
+import { defineChain, isAddress, zeroAddress, type Address, type Chain } from "viem";
 import type { PriceSource } from "./prices";
 
 export const monadMainnet: Chain = defineChain({
@@ -59,10 +59,12 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
   const chain = network === "mainnet" ? monadMainnet : monadTestnet;
   const explorerUrl = chain.blockExplorers?.default.url ?? "https://monadscan.com";
 
-  const address = env.CLAW_MACHINE_ADDRESS?.trim();
-  if (address && !isAddress(address)) {
-    throw new Error(`CLAW_MACHINE_ADDRESS is not a valid address: "${address}"`);
+  const rawAddress = env.CLAW_MACHINE_ADDRESS?.trim();
+  if (rawAddress && rawAddress !== zeroAddress && !isAddress(rawAddress)) {
+    throw new Error(`CLAW_MACHINE_ADDRESS is not a valid address: "${rawAddress}"`);
   }
+  // The .env.example uses the zero address as a placeholder; treat it as unset.
+  const address = rawAddress && rawAddress !== zeroAddress ? rawAddress : undefined;
 
   const privateKey = env.KEEPER_PRIVATE_KEY?.trim();
   if (privateKey && !/^0x[0-9a-fA-F]{64}$/.test(privateKey)) {
@@ -75,9 +77,6 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
   }
 
   const maxDeviationBps = BigInt(parseInteger("MAX_DEVIATION_BPS", env.MAX_DEVIATION_BPS, 2_500));
-  if (maxDeviationBps > 10_000n) {
-    throw new Error("MAX_DEVIATION_BPS must be <= 10000 (100%)");
-  }
 
   return {
     network,

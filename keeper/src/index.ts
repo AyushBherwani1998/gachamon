@@ -419,7 +419,14 @@ async function main(): Promise<void> {
 
   let wallet: WalletClient | undefined;
   let account: PrivateKeyAccount | undefined;
-  if (cfg.privateKey) {
+
+  if (!flags.dryRun) {
+    if (!cfg.privateKey) {
+      throw new Error("KEEPER_PRIVATE_KEY is required (or use --dry-run)");
+    }
+    if (cfg.privateKey === `0x${"0".repeat(64)}`) {
+      throw new Error("KEEPER_PRIVATE_KEY is still the placeholder from .env.example");
+    }
     account = privateKeyToAccount(cfg.privateKey);
     wallet = createWalletClient({
       account,

@@ -105,7 +105,9 @@ Example output (prices will differ):
 `bun run dry` is one-shot and exits. It does not need `KEEPER_PRIVATE_KEY` or
 `CLAW_MACHINE_ADDRESS`. If a contract address is configured it also shows the
 on-chain baseline and whether an update is needed; otherwise it prices the four
-built-in symbols.
+built-in symbols. The zero-address placeholder in `.env.example` is treated as
+unset, and the placeholder private key is ignored in dry-run mode, so copying
+`.env.example` to `.env` does not break this command.
 
 ---
 
@@ -213,11 +215,17 @@ skips it rather than pushing a suspicious price. If the split is confirmed and
 you want to accept the new level, raise the guard for one run:
 
 ```bash
-MAX_DEVIATION_BPS=10000 bun run once
+MAX_DEVIATION_BPS=100000 bun run once
 ```
 
 then put it back to the default. During that run the keeper accepts the new
-price and future ticks use it as the baseline.
+price and future ticks use it as the baseline. Use the smallest value that
+covers the confirmed move; `100000` (1000%) is a practical ceiling for splits
+and reverse splits, not a setting to run with every day.
+
+The same applies after keeper downtime: if a stock moved more than 25% while
+the keeper was offline, the first tick skips it. Confirm the price on a second
+source, run once with a higher guard, and return to the default.
 
 ---
 
