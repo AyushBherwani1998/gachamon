@@ -65,8 +65,9 @@ against `src/abi/clawMachine.ts` and update the subset used by the app:
 - `getStocks`, `getPrices`, `getPull`, `getPullPayout`, `getRecentPulls`
 - `PullRequested` / `PullResolved` events
 
-The current ABI was checked against `contracts/abi/ClawMachine.json` at commit
-`fd645cb` and matches for every function and event the app reads.
+The current ABI is checked against the published
+`contracts/abi/ClawMachine.json` and matches for every function and event the
+app reads.
 
 ## Mock mode
 
@@ -123,9 +124,9 @@ src/
   abi/            ClawMachine + ERC20/MockUSDC ABIs (as const)
   app/            App Router page, layout, providers, global styles
   components/     header, machine placeholder, pull button, result, odds,
-                  balances, recent pulls, footer, network banner
+                  balances, claimable balance, recent pulls, footer, banner
   config/         chain definitions, deployments, wagmi config
-  hooks/          useMachine, usePull, useBalances, useFaucet
+  hooks/          useMachine, usePull, useBalances, useFaucet, useOwed
   lib/            formatting, shared types, mock-mode simulator
 ```
 
