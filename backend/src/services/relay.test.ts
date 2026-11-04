@@ -29,7 +29,6 @@ vi.mock('../config.js', async () => {
         status: 'success',
         logs: [],
       }),
-      request: vi.fn().mockRejectedValue(new Error('Method not supported')),
       readContract: vi.fn().mockResolvedValue(1_480_000_000_000_000_000n),
     },
   };

@@ -146,19 +146,9 @@ export async function validateAndRelayTransaction(signedTx: string): Promise<Rel
   recordTx(txHash);
 
   try {
-    let broadcastHash: `0x${string}`;
-    try {
-      // Monad supports synchronous broadcast returning the transaction hash.
-      const hash = (await publicClient.request({
-        method: 'eth_sendRawTransactionSync' as any,
-        params: [signedTx as `0x${string}`],
-      })) as string;
-      broadcastHash = hash as `0x${string}`;
-    } catch (syncError) {
-      broadcastHash = await publicClient.sendRawTransaction({
-        serializedTransaction: signedTx as `0x${string}`,
-      });
-    }
+    const broadcastHash = await publicClient.sendRawTransaction({
+      serializedTransaction: signedTx as `0x${string}`,
+    });
 
     const receipt = await publicClient.waitForTransactionReceipt({
       hash: broadcastHash,
