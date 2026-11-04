@@ -140,6 +140,7 @@ contract ClawMachineForkTest is Test {
         assertEq(claw.getPendingReservations(), 0, "reservation released");
 
         uint256 payoutValue = _payoutValue(pullId, before);
+        _logReceived(before);
         console.log("Payout value (USDC 6dp):", payoutValue);
         assertApproxEqRel(payoutValue, 730_000, 0.01e18, "common payout within 1%");
 
@@ -168,6 +169,7 @@ contract ClawMachineForkTest is Test {
 
         assertEq(claw.getPendingReservations(), 0, "reservation released");
         uint256 payoutValue = _payoutValue(pullId, before);
+        _logReceived(before);
         console.log("Payout value (USDC 6dp):", payoutValue);
         assertApproxEqRel(payoutValue, 10_000_000, 0.01e18, "legendary 10x payout within 1%");
 
@@ -202,6 +204,12 @@ contract ClawMachineForkTest is Test {
             uint256 price = claw.getPullPriceSnapshot(pullId, tokens[i]);
             value += (received * price) / 1e18;
         }
+    }
+
+    function _logReceived(uint256[3] memory before) internal view {
+        console.log("TSLAx received:", IERC20(TSLAx).balanceOf(ACTOR) - before[0]);
+        console.log("NVDAx received:", IERC20(NVDAx).balanceOf(ACTOR) - before[1]);
+        console.log("SPYx received:", IERC20(SPYx).balanceOf(ACTOR) - before[2]);
     }
 
     function _runCallback(uint64 sequenceNumber, bytes32 randomNumber)
