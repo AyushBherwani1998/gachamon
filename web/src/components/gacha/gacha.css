@@ -175,6 +175,8 @@
   border-radius: 0;
   cursor: pointer;
   transition: transform 140ms ease-out;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .gm-cardButton:hover {
@@ -586,10 +588,15 @@
 }
 
 .gm-explorer {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
   color: var(--frame);
   text-decoration: underline;
   text-underline-offset: 2px;
   white-space: nowrap;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .gm-explorer:hover {
