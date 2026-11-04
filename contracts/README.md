@@ -119,6 +119,9 @@ Pyth Entropy V2 is at `0x825c0390f379C631f3Cf11A82a37D20BddF93c07` on Monad **te
 The testnet fee is dynamic and currently ~0.128 MON for an 800k callback, not 1 wei. Always
 read `getFee()` / `getFeeV2(callbackGasLimit)` before pulling.
 
+The deploy simulation uses ~8M gas (~1.7 testnet MON at current gas prices), so fund the deployer
+with at least 2 testnet MON before broadcasting.
+
 ```bash
 # one-time: import a funded testnet key into a keystore named "deployer"
 cast wallet import deployer --interactive
@@ -179,6 +182,8 @@ Environment variables (all optional):
 | `STOCKS` | TSLAx, NVDAx, SPYx | comma separated xStock addresses, max 8 |
 
 AAPLx is intentionally not in the default list: it has no usable liquidity on Monad today.
+
+The deployment simulation uses ~3.2M gas (~0.65 MON at current gas prices).
 
 ```bash
 cast wallet import deployer --interactive
