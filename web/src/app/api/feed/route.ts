@@ -90,8 +90,10 @@ async function readRecentPulls(network: NetworkKey): Promise<FeedResponse> {
   const blockNumbers = [...new Set(recent.map((log) => log.blockNumber.toString()))];
   const blocks = await Promise.all(
     blockNumbers.map(async (value) => {
-      const block = await client.getBlock({ blockNumber: BigInt(value) });
-      return [value, Number(block.timestamp)] as const;
+      const block = await client
+        .getBlock({ blockNumber: BigInt(value) })
+        .catch(() => null);
+      return [value, block ? Number(block.timestamp) : 0] as const;
     })
   );
   const timestamps = new Map(blocks);
