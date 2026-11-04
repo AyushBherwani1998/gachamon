@@ -234,7 +234,12 @@ export function useMachine(): MachineSnapshot {
     error:
       reads.error instanceof Error
         ? reads.error.message
-        : priceError ?? (infosRead.error instanceof Error ? infosRead.error.message : null),
+        : priceError ??
+          (balancesRead.error instanceof Error
+            ? balancesRead.error.message
+            : infosRead.error instanceof Error
+              ? infosRead.error.message
+              : null),
     refetch: () => {
       void reads.refetch();
       void infosRead.refetch();

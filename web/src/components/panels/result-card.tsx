@@ -184,7 +184,7 @@ export function ResultCard({
           ) : (
             <div className="flex min-h-11 items-center justify-center gap-2 px-2">
               <PanelTag tone={legendary ? "gold" : "live"}>
-                {legendary ? "2% pull" : "98% pull"}
+                {legendary ? "Legendary pull" : "Common pull"}
               </PanelTag>
               <span className="font-mono text-[10px] text-muted-foreground">
                 verifiable by Pyth Entropy

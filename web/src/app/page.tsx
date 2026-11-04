@@ -178,6 +178,9 @@ export default function Home() {
         : "Drawing your card. Waiting for Pyth Entropy randomness.";
     }
     if (pull.phase === "revealed" && pull.result) {
+      if (pull.result.stocks.length === 0) {
+        return "Pull resolved. No stock payout was recorded.";
+      }
       const symbols = pull.result.stocks.map((stock) => stock.symbol).join(", ");
       return `${pull.result.legendary ? "Legendary" : "Common"} pull! You received ${symbols} worth ${formatUsd6(pull.result.valueUsd6)}.`;
     }
