@@ -9,8 +9,8 @@ The service targets the **audited `ClawMachine` contract** (PR #14):
   `transferFrom`; `msg.value` must cover `getFee()` (the Pyth Entropy fee).
 - Randomness and payouts happen in the Pyth Entropy callback. There is no claim
   step.
-- Pyth price feeds are **not** used by the backend. There is no
-  `priceUpdateData`, `getPythFee()`, or `getTotalFee()` path.
+- Pyth price feeds are **not** used by the backend. The only Pyth interaction is
+  the Entropy fee returned by `getFee()`.
 - Supported networks: Monad mainnet (`143`) and testnet (`10143`).
 
 ## Architecture
