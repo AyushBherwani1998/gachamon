@@ -23,6 +23,7 @@ contract ClawMachine is IEntropyConsumer, Ownable, ReentrancyGuard {
     uint256 public constant MAX_STOCKS = 8;
     uint256 public constant RECENT_PULLS_SIZE = 20;
     uint256 public constant STOCK_UNIT = 1e18;
+    uint256 public constant STUCK_PULL_TIMEOUT = 10 minutes;
 
     // ---------------------------------------------------------------------
     // Types
@@ -119,6 +120,7 @@ contract ClawMachine is IEntropyConsumer, Ownable, ReentrancyGuard {
     event PayoutOwed(
         uint256 indexed pullId, address indexed player, address indexed stock, uint256 amount
     );
+    event PullRefunded(uint256 indexed pullId, address indexed player, uint256 amount);
     event OwedWithdrawn(address indexed player, address indexed token, uint256 amount);
 
     // ---------------------------------------------------------------------
@@ -239,6 +241,45 @@ contract ClawMachine is IEntropyConsumer, Ownable, ReentrancyGuard {
                 emit OwedWithdrawn(player, usdc, usdcOwed);
             }
         }
+    }
+
+    /// @notice Recover a pull whose entropy callback never landed.
+    /// @dev Callable by the player or the owner after STUCK_PULL_TIMEOUT.
+    function refundStuckPull(uint256 pullId) external nonReentrant {
+        Pull storage currentPull = _pulls[pullId];
+        require(currentPull.status == PullStatus.Pending, "not pending");
+        require(msg.sender == currentPull.player || msg.sender == owner(), "not allowed");
+        require(
+            block.timestamp > uint256(currentPull.requestedAt) + STUCK_PULL_TIMEOUT, "too early"
+        );
+
+        // Release the reservation before any external call.
+        uint256 reserved = _pullReservedValue[pullId];
+        _pullReservedValue[pullId] = 0;
+        if (reservedValueUsd6 >= reserved) {
+            reservedValueUsd6 -= reserved;
+        } else {
+            reservedValueUsd6 = 0;
+        }
+
+        currentPull.status = PullStatus.Resolved;
+        currentPull.resolvedAt = uint64(block.timestamp);
+        currentPull.valueUsd6 = 0;
+
+        uint256 amount = _pullPrice[pullId];
+        uint256 freeUsdc = _freeBalance(usdc);
+        uint256 payUsdc = amount < freeUsdc ? amount : freeUsdc;
+        bool paid = payUsdc > 0 && _tryTransfer(usdc, currentPull.player, payUsdc);
+        uint256 unpaid = paid ? amount - payUsdc : amount;
+
+        if (unpaid > 0) {
+            owed[currentPull.player][usdc] += unpaid;
+            totalOwed[usdc] += unpaid;
+            emit PayoutOwed(pullId, currentPull.player, usdc, unpaid);
+        }
+
+        _pushRecentPull(pullId);
+        emit PullRefunded(pullId, currentPull.player, amount);
     }
 
     // ---------------------------------------------------------------------

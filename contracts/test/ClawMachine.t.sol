@@ -512,6 +512,104 @@ contract ClawMachineTest is Test {
     }
 
     // ---------------------------------------------------------------------
+    // Stuck pull refunds
+    // ---------------------------------------------------------------------
+
+    function testRefundStuckPullAfterTimeout() public {
+        vm.warp(1_000_000);
+        _seedPrices();
+        uint256 pullId = _pull(PLAYER, machine.getFee());
+        uint64 sequenceNumber = machine.getPull(pullId).sequenceNumber;
+        assertEq(machine.reservedValueUsd6(), 10_000_000, "reserved");
+
+        uint256 refundAt = 1_000_000 + machine.STUCK_PULL_TIMEOUT() + 1;
+        vm.warp(refundAt);
+        uint256 playerBefore = usdc.balanceOf(PLAYER);
+
+        vm.expectEmit(true, true, false, true, address(machine));
+        emit ClawMachine.PullRefunded(pullId, PLAYER, 1_000_000);
+        vm.prank(PLAYER);
+        machine.refundStuckPull(pullId);
+
+        ClawMachine.Pull memory p = machine.getPull(pullId);
+        assertEq(uint256(p.status), uint256(ClawMachine.PullStatus.Resolved), "resolved");
+        assertEq(p.valueUsd6, 0, "no payout value");
+        assertEq(p.resolvedAt, refundAt, "refund time");
+        assertEq(machine.reservedValueUsd6(), 0, "reservation released");
+        assertEq(usdc.balanceOf(PLAYER) - playerBefore, 1_000_000, "pull price refunded");
+
+        // A late entropy callback must be ignored.
+        entropy.fulfill(sequenceNumber, COMMON_RANDOM);
+        assertEq(machine.getPull(pullId).resolvedAt, refundAt, "late callback ignored");
+        (address[] memory payoutStocks,) = machine.getPullPayout(pullId);
+        assertEq(payoutStocks.length, 0, "no payout recorded");
+    }
+
+    function testRefundStuckPullAuthorizationAndTiming() public {
+        vm.warp(1_000_000);
+        _seedPrices();
+        uint256 pullId = _pull(PLAYER, machine.getFee());
+
+        vm.startPrank(PLAYER);
+        vm.expectRevert("too early");
+        machine.refundStuckPull(pullId);
+        vm.stopPrank();
+
+        vm.warp(1_000_000 + machine.STUCK_PULL_TIMEOUT() + 1);
+
+        vm.startPrank(STRANGER);
+        vm.expectRevert("not allowed");
+        machine.refundStuckPull(pullId);
+        vm.stopPrank();
+
+        // Owner can recover a stuck pull too.
+        machine.refundStuckPull(pullId);
+        assertEq(
+            uint256(machine.getPull(pullId).status),
+            uint256(ClawMachine.PullStatus.Resolved),
+            "owner refunded"
+        );
+    }
+
+    function testRefundUsesSnapshotPrice() public {
+        vm.warp(1_000_000);
+        _seedPrices();
+        uint256 pullId = _pull(PLAYER, machine.getFee());
+
+        // Raising the price now must not change the refund for the in-flight pull.
+        machine.setPullConfig(2_000_000, 1_000_000, 10_000_000, 200);
+
+        vm.warp(1_000_000 + machine.STUCK_PULL_TIMEOUT() + 1);
+        uint256 playerBefore = usdc.balanceOf(PLAYER);
+
+        vm.prank(PLAYER);
+        machine.refundStuckPull(pullId);
+
+        assertEq(usdc.balanceOf(PLAYER) - playerBefore, 1_000_000, "old pull price refunded");
+    }
+
+    function testRefundWithoutFreeUsdcBecomesOwed() public {
+        vm.warp(1_000_000);
+        _seedPrices();
+        uint256 pullId = _pull(PLAYER, machine.getFee());
+
+        // Owner takes the pull proceeds, leaving no free USDC for the refund.
+        machine.withdrawUsdc(address(this), 1_000_000);
+
+        vm.warp(1_000_000 + machine.STUCK_PULL_TIMEOUT() + 1);
+        vm.prank(PLAYER);
+        machine.refundStuckPull(pullId);
+
+        assertEq(machine.owed(PLAYER, address(usdc)), 1_000_000, "refund owed");
+        assertEq(machine.totalOwed(address(usdc)), 1_000_000, "owed accounted");
+
+        usdc.mint(address(machine), 1_000_000);
+        vm.prank(PLAYER);
+        machine.withdrawOwed();
+        assertEq(machine.owed(PLAYER, address(usdc)), 0, "owed cleared");
+    }
+
+    // ---------------------------------------------------------------------
     // Entropy callback
     // ---------------------------------------------------------------------
 
