@@ -54,7 +54,7 @@ The xStocks are transferred automatically to the player's address (the caller of
 - Fallback to owed balance if transfer fails (withdrawal available)
 
 ### Pyth Price Feeds (Pull Oracle)
-- **Contract**: `0xACeA761c27A909d4D3895128EBe6370FDE2dF481` (PythPro on Monad)
+- **Contract**: `0xB754BA51E3861Ac0Cb67f73CD046dE790A36508d` (PriceFeedUpgraded - Pyth Core Aug 2026 upgrade, recommended for new integrations)
 - Frontend fetches price updates from **Pyth Hermes API**: `https://hermes.pyth.network/v2/updates/price/latest`
 - Price updates include cryptographic proof of real equity prices
 - Equity feed IDs:
@@ -272,7 +272,7 @@ interface IClawMachine {
 | Asset/Contract | Address |
 |----------------|---------|
 | **USDC** | `0x754704Bc059F8C67012fEd69BC8A327a5aafb603` (6 decimals) |
-| **Pyth Price Feed (PythPro)** | `0xACeA761c27A909d4D3895128EBe6370FDE2dF481` (pull oracle) |
+| **Pyth Price Feed (Core Upgraded)** | `0xB754BA51E3861Ac0Cb67f73CD046dE790A36508d` (Pyth Core Aug 2026, IPyth interface) |
 | **Pyth Entropy** | `0xD458261E832415CFd3BAE5E416FdF3230ce6F134` |
 | **Pyth Entropy Default Provider** | `0x52DeaA1c84233F7bb8C8A45baeDE41091c616506` |
 | **TSLAx** (Tesla) | `0x8aD3c73F833d3F9A523aB01476625F269aEB7Cf0` |
