@@ -1,8 +1,9 @@
 "use client";
 
 import { useMemo } from "react";
-import { useAccount, useConnect, useSwitchChain } from "wagmi";
+import { useAccount, useSwitchChain } from "wagmi";
 
+import { useAuthActions } from "@/components/auth-actions";
 import { BalancesPanel } from "@/components/balances-panel";
 import { GachaMachine } from "@/components/gacha/gacha-machine";
 import { NetworkBanner } from "@/components/network-banner";
@@ -42,7 +43,7 @@ function machineLabel(phase: PullPhase): string {
 
 export default function Home() {
   const { isConnected, chainId, address } = useAccount();
-  const { connect, connectors, isPending: connecting, error: connectError } = useConnect();
+  const { signIn, isPending: connecting, error: connectError, mode } = useAuthActions();
   const { switchChain } = useSwitchChain();
   const machine = useMachine();
   const balances = useBalances();
@@ -84,8 +85,8 @@ export default function Home() {
       if (pull.phase === "confirming") return "Confirm in wallet…";
       return pull.slow ? "Still drawing…" : "Drawing…";
     }
-    if (connecting) return "Connecting…";
-    if (!isConnected) return "Connect wallet";
+    if (connecting) return mode === "privy" ? "Opening sign-in…" : "Connecting…";
+    if (!isConnected) return mode === "privy" ? "Sign in to play" : "Connect wallet";
     if (wrongNetwork) return `Switch to ${deployment.name}`;
     if (!machine.isDeployed) return "Machine not deployed";
     if (!usdcReady) return "USDC not configured";
@@ -102,6 +103,7 @@ export default function Home() {
     demo,
     busy,
     connecting,
+    mode,
     isConnected,
     wrongNetwork,
     machine.isDeployed,
@@ -125,9 +127,7 @@ export default function Home() {
   const handlePrimary = () => {
     if (busy) return;
     if (!demo && !isConnected) {
-      const connector =
-        connectors.find((candidate) => candidate.id === "injected") ?? connectors[0];
-      if (connector) connect({ connector });
+      signIn();
       return;
     }
     if (!demo && wrongNetwork) {
@@ -211,9 +211,9 @@ export default function Home() {
 
             {connectError && !isConnected ? (
               <p className="max-w-sm text-center text-[10px] text-destructive" role="alert">
-                {connectError.message.includes("rejected")
-                  ? "Connection cancelled."
-                  : connectError.message}
+                {connectError.includes("rejected")
+                  ? "Sign-in cancelled."
+                  : connectError}
               </p>
             ) : null}
 

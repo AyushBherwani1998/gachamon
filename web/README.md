@@ -9,6 +9,7 @@ callback, so there is no claim step.
 
 - Next.js 16 (App Router, TypeScript, `src/` directory)
 - Tailwind CSS v4 + shadcn/ui + [8bitcn](https://www.8bitcn.com) pixel components
+- Privy (`@privy-io/react-auth` + `@privy-io/wagmi`) for sign-in
 - wagmi + viem + TanStack Query
 - Bun (`bun install`, `bun run build`)
 
@@ -34,6 +35,7 @@ bun run typecheck
 | Variable | Purpose |
 | --- | --- |
 | `NEXT_PUBLIC_DEFAULT_NETWORK` | `testnet` (default) or `mainnet` |
+| `NEXT_PUBLIC_PRIVY_APP_ID` | Privy app id. Blank = injected/MetaMask fallback |
 | `NEXT_PUBLIC_CLAW_MACHINE_MAINNET` | ClawMachine address on Monad mainnet (143) |
 | `NEXT_PUBLIC_CLAW_MACHINE_TESTNET` | ClawMachine address on Monad testnet (10143) |
 | `NEXT_PUBLIC_USDC_TESTNET` | Testnet MockUSDC address |
@@ -69,6 +71,28 @@ The current ABI is checked against the published
 `contracts/abi/ClawMachine.json` and matches for every function and event the
 app reads.
 
+## Wallet sign-in (Privy)
+
+Create an app at [dashboard.privy.io](https://dashboard.privy.io), then set
+`NEXT_PUBLIC_PRIVY_APP_ID`. The id is public and is embedded in the client
+bundle.
+
+The app configures Privy with:
+
+- login methods: **email**, **Google**, and **external wallets** (MetaMask)
+- embedded wallets: `createOnLogin: "users-without-wallets"` (email/Google
+  users get a wallet automatically)
+- `supportedChains` and `defaultChain` from the viem Monad definitions, ordered
+  by `NEXT_PUBLIC_DEFAULT_NETWORK`
+
+In the Privy dashboard, enable Email, Google, and Wallet login, and add your
+origins (for example `http://localhost:3000` and the Vercel production domain).
+Privy rejects unknown origins at runtime even when the build succeeds.
+
+If `NEXT_PUBLIC_PRIVY_APP_ID` is missing or is not a 25-character app id, the app
+falls back to the injected + MetaMask connectors. Mock mode also uses the
+fallback, so `NEXT_PUBLIC_DEMO_MODE=mock` never opens a login modal.
+
 ## Mock mode
 
 ```bash
@@ -98,6 +122,9 @@ USDC) and a link to the Monad MON faucet.
 
 ## How a pull works
 
+0. The header signs in through Privy (email, Google, or MetaMask). Privy creates
+   an embedded wallet for users who do not have one. Without a Privy app id the
+   same button connects an injected wallet instead.
 1. `useMachine()` reads the machine config and inventory every 3 s through
    contract views (`getRecentPulls` + `getPull` + `getPullPayout` for history —
    never `eth_getLogs`, which public Monad RPCs limit).
@@ -139,10 +166,14 @@ replaces its internals without touching the page wiring.
 - Root directory: `web`
 - Framework preset: Next.js
 - Package manager: Bun (`bun install`, `bun run build`)
-- Add the environment variables from the table above in Project Settings.
+- Add the environment variables from the table above in Project Settings,
+  including `NEXT_PUBLIC_PRIVY_APP_ID` and the Vercel domain as a Privy allowed
+  origin.
 
 ## Troubleshooting
 
+- **Sign-in modal fails to load** — check that the Privy app id is the full
+  25-character id and that the current origin is allowed in the Privy dashboard.
 - **"Machine not deployed"** — set the ClawMachine (and testnet USDC) env vars
   for the selected network and restart/rebuild.
 - **"Not enough USDC"** — on testnet use **Get test USDC**; on mainnet top up
