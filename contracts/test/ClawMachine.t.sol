@@ -637,6 +637,15 @@ contract ClawMachineTest is Test {
         new ClawMachine(address(usdc), address(entropy), tooMany, TREASURY, address(this));
     }
 
+    function testConstructorRejectsUsdcAsStock() public {
+        address[] memory withUsdc = new address[](2);
+        withUsdc[0] = address(tsla);
+        withUsdc[1] = address(usdc);
+
+        vm.expectRevert("stock is usdc");
+        new ClawMachine(address(usdc), address(entropy), withUsdc, TREASURY, address(this));
+    }
+
     // ---------------------------------------------------------------------
     // Internal helper
     // ---------------------------------------------------------------------

@@ -143,6 +143,7 @@ contract ClawMachine is IEntropyConsumer, Ownable, ReentrancyGuard {
         for (uint256 i = 0; i < stocks_.length; ++i) {
             address stock = stocks_[i];
             require(stock != address(0) && stock.code.length > 0, "invalid stock");
+            require(stock != usdc_, "stock is usdc");
             require(!isStock[stock], "duplicate stock");
             isStock[stock] = true;
             _stocks.push(stock);
