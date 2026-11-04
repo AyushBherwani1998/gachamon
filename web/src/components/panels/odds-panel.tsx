@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader } from "@/components/ui/8bit/card";
 import { cn } from "@/lib/utils";
 
-import { PanelHeader, PanelSkeleton, PanelTag } from "./panel-header";
+import { PANEL_FONT, PanelHeader, PanelSkeleton, PanelTag } from "./panel-header";
 
 function parseUsd(value: string): number | null {
   const cleaned = value.replace(/[^0-9.]/g, "");
@@ -76,8 +76,12 @@ export function OddsPanel({
   const edgeLabel = edge === null ? "—" : `${edge.toFixed(2)}%`;
 
   return (
-    <Card className="h-full" aria-busy={loading || undefined}>
-      <CardHeader>
+    <Card
+      font="normal"
+      className={cn("h-full", PANEL_FONT)}
+      aria-busy={loading || undefined}
+    >
+      <CardHeader font="normal">
         <PanelHeader
           eyebrow="House math, in the open"
           title="Odds & expected value"
@@ -89,7 +93,7 @@ export function OddsPanel({
         />
       </CardHeader>
 
-      <CardContent className="flex flex-col gap-4 pb-5">
+      <CardContent font="normal" className="flex flex-col gap-4 pb-5">
         {loading ? (
           <span className="sr-only">Loading odds and expected value…</span>
         ) : null}

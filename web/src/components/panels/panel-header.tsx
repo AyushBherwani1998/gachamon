@@ -2,6 +2,9 @@ import type { ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 
+export const PANEL_FONT =
+  "[font-family:var(--font-geist-sans),ui-sans-serif,system-ui,sans-serif]";
+
 /**
  * Shared card header used by every panel so the eyebrow / title / tag rhythm
  * is identical across the app.

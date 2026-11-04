@@ -6,7 +6,7 @@ import QRCode from "qrcode";
 import { Card, CardContent, CardHeader } from "@/components/ui/8bit/card";
 import { cn } from "@/lib/utils";
 
-import { PanelHeader, PanelSkeleton, PanelTag } from "./panel-header";
+import { PANEL_FONT, PanelHeader, PanelSkeleton, PanelTag } from "./panel-header";
 import { PixelGlyph } from "./pixel";
 
 type QrResult = {
@@ -64,8 +64,12 @@ export function QrCard({
   const failed = current?.failed ?? false;
 
   return (
-    <Card className="h-full" aria-busy={!current || undefined}>
-      <CardHeader>
+    <Card
+      font="normal"
+      className={cn("h-full", PANEL_FONT)}
+      aria-busy={!current || undefined}
+    >
+      <CardHeader font="normal">
         <PanelHeader
           eyebrow="Point a phone at the screen"
           title="Scan to play"
@@ -73,7 +77,7 @@ export function QrCard({
         />
       </CardHeader>
 
-      <CardContent className="flex flex-col items-center gap-4 pb-6">
+      <CardContent font="normal" className="flex flex-col items-center gap-4 pb-6">
         <div
           className={cn(
             "relative w-full max-w-[320px] border-4 border-foreground bg-white p-2",
@@ -124,8 +128,8 @@ export function QrCard({
           className={cn(
             "inline-flex min-h-11 max-w-full items-center gap-1.5 px-2",
             "font-mono text-[10px] text-muted-foreground underline decoration-dotted underline-offset-4",
-            "transition-colors duration-150 ease-out hover:text-foreground",
-            "active:scale-[0.96]",
+            "transition-colors duration-150 ease-out hover:text-foreground motion-reduce:transition-none",
+            "active:scale-[0.96] motion-reduce:active:scale-100",
             "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground",
           )}
         >

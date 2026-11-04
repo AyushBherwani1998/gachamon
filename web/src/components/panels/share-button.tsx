@@ -53,9 +53,9 @@ export function ShareButton({ text, url }: { text: string; url: string }) {
         "border-2 border-foreground bg-background px-4 py-2",
         "font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground",
         "shadow-[3px_3px_0_0_var(--color-foreground)]",
-        "transition-[transform,background-color,color,box-shadow] duration-150 ease-out",
+        "transition-[transform,background-color,color,box-shadow] duration-150 ease-out motion-reduce:transition-none",
         "hover:bg-foreground hover:text-background",
-        "active:translate-x-px active:translate-y-px active:scale-[0.96] active:shadow-[1px_1px_0_0_var(--color-foreground)]",
+        "active:translate-x-px active:translate-y-px active:scale-[0.96] active:shadow-[1px_1px_0_0_var(--color-foreground)] motion-reduce:active:scale-100 motion-reduce:active:translate-x-0 motion-reduce:active:translate-y-0",
         "focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-foreground",
       )}
     >

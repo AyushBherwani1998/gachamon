@@ -143,7 +143,7 @@ export default function PanelsPreviewPage() {
   const feed = useMemo(() => buildFeed(now), [now]);
 
   return (
-    <div className="min-h-full flex-1 bg-[linear-gradient(to_right,rgba(255,255,255,0.035)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.035)_1px,transparent_1px)] bg-[size:32px_32px]">
+    <div className="min-h-full flex-1 bg-[linear-gradient(to_right,rgba(255,255,255,0.035)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.035)_1px,transparent_1px)] bg-[size:32px_32px] [font-family:var(--font-geist-sans),ui-sans-serif,system-ui,sans-serif]">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-10 px-4 py-8 sm:px-6 sm:py-10">
         <header className="border-b-4 border-foreground/20 pb-5">
           <div className="flex flex-wrap items-end justify-between gap-4">

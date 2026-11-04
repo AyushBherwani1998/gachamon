@@ -3,7 +3,7 @@
 import { Card, CardContent, CardHeader } from "@/components/ui/8bit/card";
 import { cn } from "@/lib/utils";
 
-import { PanelHeader, PanelSkeleton, PanelTag } from "./panel-header";
+import { PANEL_FONT, PanelHeader, PanelSkeleton, PanelTag } from "./panel-header";
 import { PixelGlyph } from "./pixel";
 import type { FeedItem } from "./types";
 import { useNow } from "./use-now";
@@ -126,9 +126,9 @@ function FeedRow({
           aria-label={`View ${item.player} on Monadscan`}
           className={cn(
             "grid size-11 place-items-center border-2 border-transparent text-muted-foreground",
-            "transition-[transform,color,border-color] duration-150 ease-out",
+            "transition-[transform,color,border-color] duration-150 ease-out motion-reduce:transition-none",
             "hover:border-foreground/20 hover:text-foreground",
-            "active:scale-[0.96]",
+            "active:scale-[0.96] motion-reduce:active:scale-100",
             "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground",
           )}
         >
@@ -191,8 +191,12 @@ export function LiveFeed({
   );
 
   return (
-    <Card className="h-full" aria-busy={loading || undefined}>
-      <CardHeader>
+    <Card
+      font="normal"
+      className={cn("h-full", PANEL_FONT)}
+      aria-busy={loading || undefined}
+    >
+      <CardHeader font="normal">
         <PanelHeader
           eyebrow="Last 20 pulls, newest first"
           title="Live feed"
@@ -200,7 +204,7 @@ export function LiveFeed({
         />
       </CardHeader>
 
-      <CardContent className="p-0!">
+      <CardContent font="normal" className="p-0!">
         <p className="sr-only" aria-live="polite">
           {loading ? "Loading pulls" : `${sorted.length} pulls shown`}
         </p>

@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/8bit/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/8bit/card";
 import { cn } from "@/lib/utils";
 
-import { PanelHeader, PanelTag } from "./panel-header";
+import { PANEL_FONT, PanelHeader, PanelTag } from "./panel-header";
 import { PixelGlyph, StockEmblem } from "./pixel";
 import { ShareButton } from "./share-button";
 import type { PanelPayout } from "./types";
@@ -50,12 +50,12 @@ export function ResultCard({
   const accent = legendary ? ACCENTS.legendary : ACCENTS.common;
 
   return (
-    <Card className="relative h-full">
+    <Card font="normal" className={cn("relative h-full", PANEL_FONT)}>
       <span
         aria-hidden="true"
         className={cn("absolute inset-x-0 top-0 h-1.5", accent.strip)}
       />
-      <CardHeader className="pt-2 pb-3">
+      <CardHeader font="normal" className="pt-2 pb-3">
         <div className="flex items-start justify-between gap-3">
           <PanelHeader
             eyebrow="The claw paid out"
@@ -78,7 +78,7 @@ export function ResultCard({
         </div>
       </CardHeader>
 
-      <CardContent className="flex flex-1 flex-col gap-4 pb-5">
+      <CardContent font="normal" className="flex flex-1 flex-col gap-4 pb-5">
         <div className={cn("border-2 border-dashed p-3", accent.frame)}>
           <div className="mb-2.5 flex items-center justify-between gap-2">
             <p className="retro text-[8px] uppercase leading-none text-muted-foreground">
@@ -154,8 +154,8 @@ export function ResultCard({
               disabled={!onPullAgain}
               className={cn(
                 "min-h-11 w-full text-[10px] leading-relaxed",
-                "duration-150 ease-out [transition-property:transform,background-color,color,border-color,box-shadow]",
-                "active:translate-y-0 active:scale-[0.96]",
+                "duration-150 ease-out [transition-property:transform,background-color,color,border-color,box-shadow] motion-reduce:transition-none",
+                "active:translate-y-0 active:scale-[0.96] motion-reduce:active:scale-100",
                 "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground",
               )}
             >
@@ -173,7 +173,7 @@ export function ResultCard({
                 "inline-flex min-h-11 w-full items-center justify-center gap-2 px-2",
                 "font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground",
                 "underline decoration-dotted underline-offset-4",
-                "transition-colors duration-150 ease-out hover:text-foreground",
+                "transition-colors duration-150 ease-out hover:text-foreground motion-reduce:transition-none",
                 "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground",
               )}
             >
