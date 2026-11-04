@@ -241,7 +241,6 @@ export function PixelGachaMachine({
     <section
       className={`${pixelFont.variable} ${pixelFont.className} ${s.root}`}
       data-phase={phase}
-      data-reduced-motion={reducedMotion ? "true" : undefined}
       aria-label="Claw machine card gacha"
     >
       <div className={s.stage}>
