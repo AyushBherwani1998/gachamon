@@ -7,9 +7,10 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
+  --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
+  --font-pixel: "Press Start 2P", ui-monospace, monospace;
+  --font-heading: var(--font-geist-sans);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -72,7 +73,7 @@
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
+  --radius: 0rem;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
@@ -84,38 +85,40 @@
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --background: #0b0b12;
+  --foreground: #f2efe4;
+  --card: #14141f;
+  --card-foreground: #f2efe4;
+  --popover: #181824;
+  --popover-foreground: #f2efe4;
+  --primary: #d9ff57;
+  --primary-foreground: #0b0b12;
+  --secondary: #232334;
+  --secondary-foreground: #f2efe4;
+  --muted: #1c1c2a;
+  --muted-foreground: #a4a1b5;
+  --accent: #2b2b40;
+  --accent-foreground: #f2efe4;
+  --destructive: #ff6b81;
+  --border: rgb(242 239 228 / 14%);
+  --input: rgb(242 239 228 / 18%);
+  --ring: #d9ff57;
+  --chart-1: #d9ff57;
+  --chart-2: #ff5fa2;
+  --chart-3: #57e2ff;
+  --chart-4: #ffd45f;
+  --chart-5: #a48bff;
+  --radius: 0rem;
+  --sidebar: #101019;
+  --sidebar-foreground: #f2efe4;
+  --sidebar-primary: #d9ff57;
+  --sidebar-primary-foreground: #0b0b12;
+  --sidebar-accent: #232334;
+  --sidebar-accent-foreground: #f2efe4;
+  --sidebar-border: rgb(242 239 228 / 14%);
+  --sidebar-ring: #d9ff57;
 }
+
 
 @layer base {
   * {
@@ -126,5 +129,82 @@
   }
   html {
     @apply font-sans;
+  }
+}
+
+@layer base {
+  body {
+    background-image:
+      linear-gradient(rgb(242 239 228 / 3%) 1px, transparent 1px),
+      linear-gradient(90deg, rgb(242 239 228 / 3%) 1px, transparent 1px);
+    background-size: 32px 32px;
+  }
+
+  ::selection {
+    background: var(--primary);
+    color: var(--primary-foreground);
+  }
+
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]) {
+    transition-property: transform, background-color, border-color, color, opacity;
+    transition-duration: 150ms;
+    transition-timing-function: ease-out;
+  }
+
+  button:not(:disabled):active,
+  [role="button"]:not([aria-disabled="true"]):active {
+    transform: scale(0.96);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  .amount {
+    font-family: var(--font-geist-mono), ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .pixel-shadow {
+    box-shadow: 4px 4px 0 0 rgb(0 0 0 / 55%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@keyframes machine-shake {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  25% {
+    transform: translate3d(-3px, 0, 0);
+  }
+  50% {
+    transform: translate3d(3px, 1px, 0);
+  }
+  75% {
+    transform: translate3d(-2px, -1px, 0);
+  }
+}
+
+.machine-drawing {
+  animation: machine-shake 280ms steps(2, end) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .machine-drawing {
+    animation: none;
   }
 }

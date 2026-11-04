@@ -1,46 +1,230 @@
-import { ConnectButton } from "@/components/connect-button";
-import { Badge } from "@/components/ui/8bit/badge";
-import { Button } from "@/components/ui/8bit/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/8bit/card";
+"use client";
+
+import { useMemo } from "react";
+import { useAccount, useConnect, useSwitchChain } from "wagmi";
+
+import { BalancesPanel } from "@/components/balances-panel";
+import { GachaMachine } from "@/components/gacha/gacha-machine";
+import { NetworkBanner } from "@/components/network-banner";
+import { OddsPanel } from "@/components/odds-panel";
+import { PullButton } from "@/components/pull-button";
+import { RecentPulls } from "@/components/recent-pulls";
+import { ResultCard, TxLink } from "@/components/result-card";
+import { SiteFooter } from "@/components/site-footer";
+import { SiteHeader } from "@/components/site-header";
+import { Card, CardContent } from "@/components/ui/8bit/card";
+import { deployment, IS_DEMO_MODE } from "@/config/deployments";
+import { useBalances } from "@/hooks/use-balances";
+import { useMachine } from "@/hooks/use-machine";
+import { usePull } from "@/hooks/use-pull";
+import { formatUsd6 } from "@/lib/format";
+import type { PullPhase } from "@/lib/types";
+
+const BUSY_PHASES: PullPhase[] = ["approving", "confirming", "drawing"];
+
+function machineLabel(phase: PullPhase): string {
+  switch (phase) {
+    case "approving":
+      return "CHECKING USDC ALLOWANCE";
+    case "confirming":
+      return "WAITING FOR YOUR SIGNATURE";
+    case "drawing":
+      return "CLAW IS SHAKING…";
+    case "revealed":
+      return "PRIZE DELIVERED";
+    case "error":
+      return "PULL FAILED — TRY AGAIN";
+    default:
+      return "INSERT 1 USDC TO PLAY";
+  }
+}
 
 export default function Home() {
+  const { isConnected, chainId, address } = useAccount();
+  const { connect, connectors, isPending: connecting } = useConnect();
+  const { switchChain } = useSwitchChain();
+  const machine = useMachine();
+  const balances = useBalances();
+  const pull = usePull();
+
+  const demo = IS_DEMO_MODE;
+  const busy = BUSY_PHASES.includes(pull.phase);
+  const wrongNetwork = !demo && isConnected && chainId !== deployment.chainId;
+  const needsApproval =
+    !demo &&
+    isConnected &&
+    !wrongNetwork &&
+    machine.pullPrice !== undefined &&
+    (balances.allowance ?? 0n) < machine.pullPrice;
+  const insufficientUsdc =
+    !demo &&
+    isConnected &&
+    !wrongNetwork &&
+    machine.pullPrice !== undefined &&
+    balances.usdc !== undefined &&
+    balances.usdc < machine.pullPrice;
+  const machineReady = demo || (machine.isDeployed && machine.canPull);
+
+  const label = useMemo(() => {
+    if (demo) {
+      if (busy) return pull.phase === "drawing" ? "Drawing…" : "Starting…";
+      return pull.phase === "revealed" ? "Pull again" : "Pull · 1 USDC";
+    }
+    if (busy) {
+      if (pull.phase === "approving") return "Approving USDC…";
+      if (pull.phase === "confirming") return "Confirm in wallet…";
+      return pull.slow ? "Still drawing…" : "Drawing…";
+    }
+    if (!isConnected) return "Connect wallet";
+    if (wrongNetwork) return `Switch to ${deployment.name}`;
+    if (!machine.isDeployed) return "Machine not deployed";
+    if (machine.isLoading) return "Checking machine…";
+    if (!machine.canPull) return "Machine refilling";
+    if (pull.phase === "revealed") return "Pull again";
+    if (pull.phase === "error") return "Try again";
+    if (insufficientUsdc) return "Not enough USDC";
+    if (needsApproval) return "Approve USDC";
+    return "Pull · 1 USDC";
+  }, [
+    demo,
+    busy,
+    isConnected,
+    wrongNetwork,
+    machine.isDeployed,
+    machine.isLoading,
+    machine.canPull,
+    pull.phase,
+    pull.slow,
+    insufficientUsdc,
+    needsApproval,
+  ]);
+
+  const disablePrimary =
+    busy ||
+    connecting ||
+    (!demo && isConnected && !wrongNetwork && !machineReady) ||
+    (!demo && isConnected && !wrongNetwork && machineReady && insufficientUsdc);
+
+  const handlePrimary = () => {
+    if (busy) return;
+    if (!demo && !isConnected) {
+      const connector =
+        connectors.find((candidate) => candidate.id === "injected") ?? connectors[0];
+      if (connector) connect({ connector });
+      return;
+    }
+    if (!demo && wrongNetwork) {
+      switchChain({ chainId: deployment.chainId });
+      return;
+    }
+    if (!demo && (!machine.isDeployed || !machineReady || insufficientUsdc)) return;
+    if (pull.phase === "revealed" || pull.phase === "error") {
+      pull.reset();
+    }
+    void pull.start();
+  };
+
+  const liveMessage = useMemo(() => {
+    if (pull.phase === "approving") return "Approving USDC. Confirm the approval in your wallet.";
+    if (pull.phase === "confirming") return "Confirm the pull transaction in your wallet.";
+    if (pull.phase === "drawing") {
+      return pull.slow
+        ? "Still waiting for Pyth Entropy. The pull is pending; keep this page open."
+        : "Drawing your card. Waiting for Pyth Entropy randomness.";
+    }
+    if (pull.phase === "revealed" && pull.result) {
+      const symbols = pull.result.stocks.map((stock) => stock.symbol).join(", ");
+      return `${pull.result.legendary ? "Legendary" : "Common"} pull! You received ${symbols} worth ${formatUsd6(pull.result.valueUsd6)}.`;
+    }
+    if (pull.phase === "error" && pull.error) return `Pull failed: ${pull.error}`;
+    return "";
+  }, [pull.phase, pull.result, pull.error, pull.slow]);
+
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-8 px-4 py-6 sm:px-6">
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b-4 border-foreground/20 pb-4">
-        <div>
-          <h1 className="retro text-lg sm:text-xl">CLAW MACHINE</h1>
-          <p className="text-xs text-muted-foreground">xStocks on Monad</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <Badge variant="outline">TESTNET</Badge>
-          <ConnectButton />
-        </div>
-      </header>
+    <div className="flex min-h-screen flex-col">
+      <NetworkBanner />
+      <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-6 sm:px-6">
+        <SiteHeader />
 
-      <main className="flex flex-1 flex-col items-center gap-6">
-        <Card className="w-full max-w-md">
-          <CardHeader>
-            <CardTitle className="retro text-sm">THE MACHINE</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="retro grid h-64 place-items-center border-4 border-dashed border-foreground/30 text-xs">
-              8-BIT CLAW GOES HERE
+        <main className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+          <section className="flex flex-col items-center gap-5">
+            <div className="flex w-full max-w-sm items-center justify-between border-y-2 border-border/60 py-2 text-[9px] text-muted-foreground">
+              <span className="retro">
+                PULLS <span className="amount text-foreground">{machine.totalPulls?.toString() ?? "0"}</span>
+              </span>
+              <span className="retro">
+                INVENTORY{" "}
+                <span className="amount text-foreground">
+                  {formatUsd6(machine.inventoryValueUsd6)}
+                </span>
+              </span>
+              <span className={machine.canPull || demo ? "text-primary" : "text-destructive"}>
+                {machine.isLoading ? "SYNCING" : machine.canPull || demo ? "READY" : "REFILLING"}
+              </span>
             </div>
-          </CardContent>
-        </Card>
 
-        <Button size="lg" className="min-h-12 min-w-56">
-          Pull · 1 USDC
-        </Button>
+            <GachaMachine phase={pull.phase} legendary={pull.result?.legendary} label={machineLabel(pull.phase)} />
 
-        <p className="text-xs text-muted-foreground">
-          Common 98% · $0.73 · Legendary 2% · $10.00
-        </p>
-      </main>
+            <PullButton
+              label={label}
+              onClick={handlePrimary}
+              disabled={disablePrimary}
+              busy={busy || connecting}
+            />
 
-      <footer className="border-t-4 border-foreground/20 pt-4 text-xs text-muted-foreground">
-        Built for Monad Blitz · Powered by Pyth Entropy
-      </footer>
+            <p aria-live="polite" role="status" className="sr-only">
+              {liveMessage}
+            </p>
+
+            <div className="flex w-full max-w-sm flex-col items-center gap-3">
+              {pull.phase === "drawing" || pull.phase === "confirming" ? (
+                <Card className="w-full" font="normal">
+                  <CardContent className="flex flex-col gap-2 py-4 text-center">
+                    <p className="retro text-[10px] text-primary">DRAWING…</p>
+                    <p className="text-[11px] text-muted-foreground">
+                      {pull.slow
+                        ? "Entropy is taking longer than usual. Keep this page open — we are still polling."
+                        : "Your pull is in flight. The callback usually lands within a few seconds."}
+                    </p>
+                    {pull.pullId !== null ? (
+                      <p className="amount text-[10px] text-muted-foreground">
+                        Pull #{pull.pullId.toString()}
+                      </p>
+                    ) : null}
+                    {pull.txHash ? <TxLink hash={pull.txHash} /> : null}
+                  </CardContent>
+                </Card>
+              ) : pull.phase === "revealed" && pull.result ? (
+                <ResultCard result={pull.result} />
+              ) : pull.phase === "error" ? (
+                <Card className="w-full border-x-4 border-destructive" font="normal">
+                  <CardContent className="flex flex-col gap-2 py-4">
+                    <p className="retro text-[10px] text-destructive">PULL FAILED</p>
+                    <p className="text-[11px] text-muted-foreground" role="alert">
+                      {pull.error}
+                    </p>
+                    {pull.txHash ? <TxLink hash={pull.txHash} /> : null}
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="grid min-h-24 w-full place-items-center border-4 border-dashed border-border/60 px-4 py-5 text-center">
+                  <p className="retro text-[9px] leading-relaxed text-muted-foreground">
+                    YOUR PRIZE APPEARS HERE
+                  </p>
+                </div>
+              )}
+            </div>
+          </section>
+
+          <aside className="flex flex-col gap-5">
+            <OddsPanel machine={machine} demo={demo} />
+            <BalancesPanel />
+            <RecentPulls pulls={machine.recentPulls} player={address} />
+          </aside>
+        </main>
+
+        <SiteFooter />
+      </div>
     </div>
   );
 }
