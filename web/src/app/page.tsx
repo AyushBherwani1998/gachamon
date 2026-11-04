@@ -42,7 +42,7 @@ function machineLabel(phase: PullPhase): string {
 
 export default function Home() {
   const { isConnected, chainId, address } = useAccount();
-  const { connect, connectors, isPending: connecting } = useConnect();
+  const { connect, connectors, isPending: connecting, error: connectError } = useConnect();
   const { switchChain } = useSwitchChain();
   const machine = useMachine();
   const balances = useBalances();
@@ -84,6 +84,7 @@ export default function Home() {
       if (pull.phase === "confirming") return "Confirm in wallet…";
       return pull.slow ? "Still drawing…" : "Drawing…";
     }
+    if (connecting) return "Connecting…";
     if (!isConnected) return "Connect wallet";
     if (wrongNetwork) return `Switch to ${deployment.name}`;
     if (!machine.isDeployed) return "Machine not deployed";
@@ -100,6 +101,7 @@ export default function Home() {
   }, [
     demo,
     busy,
+    connecting,
     isConnected,
     wrongNetwork,
     machine.isDeployed,
@@ -204,6 +206,14 @@ export default function Home() {
             {needsApproval && !busy && !insufficientUsdc && !insufficientMon ? (
               <p className="-mt-2 text-[10px] text-muted-foreground">
                 One approval covers 5 pulls.
+              </p>
+            ) : null}
+
+            {connectError && !isConnected ? (
+              <p className="max-w-sm text-center text-[10px] text-destructive" role="alert">
+                {connectError.message.includes("rejected")
+                  ? "Connection cancelled."
+                  : connectError.message}
               </p>
             ) : null}
 
