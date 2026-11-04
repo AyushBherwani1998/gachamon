@@ -1,4 +1,4 @@
-.PHONY: build test test-gas fmt abi clean deploy-testnet deploy-mainnet
+.PHONY: build test test-gas test-fork test-xstocks-fork fmt abi clean deploy-testnet deploy-mainnet
 
 build:
 	forge build
@@ -11,6 +11,9 @@ test-gas:
 
 test-fork:
 	FORK_TEST=true forge test --match-path test/EntropyFork.t.sol -vv
+
+test-xstocks-fork:
+	FORK=1 forge test --match-path test/XStocksFork.t.sol -vv
 
 fmt:
 	forge fmt

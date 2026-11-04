@@ -34,6 +34,7 @@ contracts/
 ├── test/
 │   ├── ClawMachine.t.sol        45 tests incl. payout split, owed accounting, refunds, gas, ring buffer
 │   ├── EntropyFork.t.sol        gated live Monad testnet Entropy request check
+│   ├── XStocksFork.t.sol        gated Monad mainnet fork proof with real xStocks
 │   └── MockEntropy.sol          test entropy contract
 ├── script/
 │   ├── DeployTestnet.s.sol      mocks + ClawMachine, seeds prices and ~500 USD inventory
@@ -63,7 +64,7 @@ forge build
 forge test
 ```
 
-Expected: build succeeds, `45 tests passed, 0 failed`, and 1 skipped (the gated live-fork test).
+Expected: build succeeds, `45 tests passed, 0 failed`, and 2 skipped (the gated live-fork tests).
 
 To run the live integration check against the deployed Monad testnet Entropy contract:
 
@@ -74,15 +75,46 @@ FORK_TEST=true forge test --match-path test/EntropyFork.t.sol -vv
 It deploys mocks on a Monad testnet fork and makes a real `requestV2` call. The provider reveal
 happens in a later block, so the pull stays Pending in the fork test. Requires network access.
 
+### Real xStocks mainnet fork check
+
+`test/XStocksFork.t.sol` forks Monad mainnet, deploys ClawMachine against the real USDC,
+TSLAx / NVDAx / SPYx and the real Pyth Entropy contract, funds inventory from the real xStocks
+issuer/vault, requests a real entropy number, simulates the callback, and asserts that the player
+actually received the xStock. It also sends an xStock to a contract recipient.
+
+```bash
+FORK=1 forge test --match-path test/XStocksFork.t.sol -vv
+# or
+make test-xstocks-fork
+```
+
+**Result on 2026-11-04 (Monad mainnet fork): PASS.** Real xStocks transfers work for:
+- issuer/vault → ClawMachine inventory,
+- ClawMachine → player payout (the actual entropy payout path),
+- player → contract recipient.
+
+All three tokens report `decimals() == 18`. The token enforces a sanctions check
+(`isSanctioned`, compliance contract `0x615Dd3B9445A94334C1579F68115042D77CC7c44`) but no
+allowlist blocked the machine or the player. Balances differ by at most 1 wei because the token is
+a rebasing/share token.
+
+The test tries `deal()` first. It cannot write these xStock balances (`stdStorage checked_write`
+fails on the rebasing token), so the fallback moves real tokens from the issuer/vault holder
+`0x5F7A4c11bde4f218f0025Ef444c369d838ffa2aD`. The xStock implementation is
+`0x65c40d624af3b18c109fbf87b7deff34cdc5f19b` behind the token proxies. Observed payout:
+SPYx, `1123076923076924` wei for a 0.73 USD common pull; real entropy sequence `353687`, fee
+`1.48 MON`.
+
 Useful targets:
 
 ```bash
-make build       # forge build
-make test        # forge test -vv
-make test-gas    # gas logs for the entropy callback
-make test-fork   # live Monad testnet entropy request (needs FORK_TEST)
-make abi         # regenerate abi/*.json
-make fmt         # forge fmt
+make build            # forge build
+make test             # forge test -vv
+make test-gas         # gas logs for the entropy callback
+make test-fork        # live Monad testnet entropy request (needs FORK_TEST)
+make test-xstocks-fork # real xStocks mainnet fork payout proof (needs FORK=1)
+make abi              # regenerate abi/*.json
+make fmt              # forge fmt
 ```
 
 ## How a pull resolves
