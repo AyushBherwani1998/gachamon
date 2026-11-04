@@ -9,7 +9,7 @@ import { erc20Abi } from "@/abi/erc20";
 import { deployment, isDeployed, IS_DEMO_MODE } from "@/config/deployments";
 import { friendlyTxError } from "@/lib/errors";
 import { drawMockPull } from "@/lib/mock";
-import { tokenAmountTo18 } from "@/lib/prices";
+import { tokenAmountTo18 } from "@/lib/tokens";
 import type { PullPhase, PullResult, PullState, TokenAmount } from "@/lib/types";
 import { shortAddress } from "@/lib/format";
 
@@ -133,7 +133,7 @@ export function usePull(): PullState {
     setPhase("preparing");
 
     try {
-      // 1. Read pull price and allowance
+      // 1. Read the pull price and USDC allowance; approve the exact price.
       const [pullPrice, allowance] = await Promise.all([
         publicClient.readContract({
           address: deployment.clawMachine,
@@ -148,8 +148,6 @@ export function usePull(): PullState {
         }),
       ]);
 
-      // 2. Approve the exact pull price when the allowance is short.
-      let approved = false;
       if (allowance < pullPrice) {
         if (runId.current !== currentRun) return;
         setPhase("approving");
@@ -164,14 +162,13 @@ export function usePull(): PullState {
           hash: approveHash,
         });
         if (approveReceipt.status !== "success") throw new Error("USDC approval reverted.");
-        approved = true;
       }
 
       if (runId.current !== currentRun) return;
       setPhase("confirming");
 
-      // 3. Read the Entropy fee immediately before sending; the first read may be
-      // stale after a slow approval. Simulate, then send pull(random).
+      // 2. Read the Entropy fee immediately before sending. Chainlink prices
+      // are read on-chain by the contract, so there is no off-chain update.
       const fee = await publicClient.readContract({
         address: deployment.clawMachine,
         abi: clawMachineAbi,
@@ -203,7 +200,7 @@ export function usePull(): PullState {
       if (receipt.status !== "success") throw new Error("The pull transaction reverted.");
       if (runId.current !== currentRun) return;
 
-      // 5. PullRequested carries the id and the Entropy sequence.
+      // 3. PullRequested carries the id and the Entropy sequence.
       const requested = parseEventLogs({
         abi: clawMachineAbi,
         eventName: "PullRequested",
@@ -218,7 +215,7 @@ export function usePull(): PullState {
       setPullId(nextPullId);
       setPhase("drawing");
 
-      // 6. Poll PullResolved (indexed pullId) from the receipt block forward,
+      // 4. Poll PullResolved (indexed pullId) from the receipt block forward,
       // in chunks of at most 100 blocks, for up to 120 s.
       const startedAt = Date.now();
       let cursor = receipt.blockNumber;
@@ -271,7 +268,7 @@ export function usePull(): PullState {
 
       const resolved = found.args;
 
-      // 7. USD value from the pull's on-chain price snapshot (USDC per 1e18).
+      // 5. USD value from the pull snapshot, falling back to the live Chainlink price.
       const rawStocks = resolved.stocks ?? [];
       const rawAmounts = resolved.amounts ?? [];
       const payouts = rawStocks
@@ -280,17 +277,30 @@ export function usePull(): PullState {
 
       const snapshots = await Promise.all(
         payouts.map(async ({ token, amount }) => {
+          let price = 0n;
           try {
-            const price = await publicClient.readContract({
+            price = await publicClient.readContract({
               address: deployment.clawMachine,
               abi: clawMachineAbi,
               functionName: "getPullPriceSnapshot",
               args: [nextPullId, token],
             });
-            return (tokenAmountTo18(amount, 18) * price) / 10n ** 18n;
           } catch {
-            return 0n;
+            // Older/newer builds may not expose the snapshot helper.
           }
+          if (price === 0n) {
+            try {
+              [price] = await publicClient.readContract({
+                address: deployment.clawMachine,
+                abi: clawMachineAbi,
+                functionName: "getTokenPrice",
+                args: [token],
+              });
+            } catch {
+              price = 0n;
+            }
+          }
+          return (tokenAmountTo18(amount, 18) * price) / 10n ** 18n;
         })
       );
       const valueUsd6 = snapshots.reduce((total, value) => total + value, 0n);

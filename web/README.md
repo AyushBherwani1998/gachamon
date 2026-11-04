@@ -2,13 +2,15 @@
 
 The player-facing app for Gachamon. Pay 1 USDC, get a Rare or Legendary pack,
 tear it open, and receive real tokenized stocks (xStocks) straight to your
-wallet. Prices come from Pyth price feeds; randomness comes from Pyth Entropy,
-and the payout is delivered inside the entropy callback. There is no claim step.
+wallet. Prices come from **Chainlink Data Feeds on Monad** (on-chain push feeds,
+no API key); randomness comes from **Pyth Entropy**, and the payout is delivered
+inside the entropy callback. There is no claim step.
 The contract and its env vars are still named `ClawMachine`.
 
-The launch machine supports **TSLAx only**. The token list is never hardcoded:
-it is read from the contract (`getSupportedTokens()` + `tokenInfo(token)`), so
-a token added later with `addToken` appears after a refresh.
+The machine launches with **TSLAx, NVDAx and SPYx**; QQQx and SPCXx (SpaceX) can
+be added later. The token list is never hardcoded: it is read from the contract
+(`getSupportedTokens()` + `tokenInfo(token)`), and symbols come from the token
+contracts. Any token added with `addToken` appears after a refresh.
 
 ## Stack
 
@@ -23,7 +25,7 @@ a token added later with `addToken` appears after a refresh.
 ```bash
 cd web
 bun install
-cp .env.example .env.local   # fill in the machine address and PYTH_API_KEY
+cp .env.example .env.local   # fill in the machine address
 bun run dev                  # http://localhost:3000
 ```
 
@@ -34,6 +36,8 @@ bun run typecheck
 bun run lint
 bun run build
 ```
+
+There is no price API key: Chainlink prices are read on-chain by the contract.
 
 ## Environment variables
 
@@ -47,12 +51,9 @@ bun run build
 | `NEXT_PUBLIC_USDC_TESTNET` | Testnet MockUSDC address (has `faucet()`) |
 | `NEXT_PUBLIC_BACKEND_URL` | Optional Ayush backend base URL, no trailing slash |
 | `NEXT_PUBLIC_DEMO_MODE` | Set to `mock` to simulate pulls without a chain |
-| `PYTH_API_KEY` | **Server-only.** Pyth Hermes API key used by `/api/price-update` |
-| `PYTH_HERMES_URL` | Optional Hermes base override (default `https://pyth.dourolabs.app/hermes`) |
 
 `NEXT_PUBLIC_*` values are inlined at build time. Restart the dev server (or
-rebuild) after changing them. `PYTH_API_KEY` must never be prefixed with
-`NEXT_PUBLIC_`; it is read only inside the server route and never logged.
+rebuild) after changing them.
 
 Mainnet USDC is the canonical constant
 `0x754704Bc059F8C67012fEd69BC8A327a5aafb603` (6 decimals), so mainnet only
@@ -75,6 +76,8 @@ jq -r '.clawMachine, .usdc' contracts/deployments/monad-testnet.json
 | Explorer | https://monadscan.com | https://testnet.monadscan.com |
 | USDC | canonical `0x7547…b603` (6 decimals) | MockUSDC, public `faucet()` |
 | Stocks | canonical xStocks (18 decimals) | MockStocks (18 decimals) |
+| Prices | Chainlink Data Feeds | Chainlink Data Feeds |
+| Randomness | Pyth Entropy V2 | Pyth Entropy V2 |
 
 The app opens on `NEXT_PUBLIC_DEFAULT_NETWORK` (mainnet by default). If the
 connected wallet is on a different chain, a banner offers a one-click network
@@ -83,94 +86,54 @@ switch. On testnet the wallet panel shows **Get test USDC** (calls
 
 ## Contract interface
 
-`src/abi/clawMachine.ts` is the typed ABI (`src/abi/ClawMachine.json` is
-generated from it) and targets Ayush's contract from PR #21, including the
-pending contracts fix:
+`src/abi/ClawMachine.json` is synced from the compiled
+`contracts/out/ClawMachine.sol/ClawMachine.json` on
+`fix/claw-pyth-entropy`; `src/abi/clawMachine.ts` exports the same ABI as a
+typed `as const` value. It targets the Chainlink version of the contract:
 
-- `pull(bytes32 userRandomNumber, bytes[] priceUpdateData)` payable
-- `getTotalFee(bytes[] priceUpdateData)` = Pyth update fee + Entropy fee
-- `getPullBasicData`, `getPullPriceSnapshot`, `getSupportedTokens`, `tokenInfo`
-- `getOwedBalance`, `withdrawOwed`
+- `pull(bytes32 userRandomNumber)` payable — no price update data
+- `getFee()` / `getEntropyFee()` — the Entropy fee; the whole `msg.value`
+- `getTokenPrice(address token)` — live Chainlink price per whole token, 6 decimals
+- `tokenInfo(address token)` — `(address priceFeed, uint8 decimals, bool supported)`
+- `canPull()` / `getInventoryValue()` — live on-chain prices
+- `getSupportedTokens()`, `getOwedBalance(player)`, `withdrawOwed()`
+- `getPullPriceSnapshot(pullId, token)` — the price snapshot used for a pull
 - `callbackGasLimit()` / `setCallbackGasLimit(uint32)`
-- `_entropyCallback(...)` (the IEntropyConsumer entry point; the web never calls it)
+- `_entropyCallback(...)` — the IEntropyConsumer entry point; the web never calls it
+
+`getPythFee`, `getTotalFee`, the `bytes[] priceUpdateData` argument and `IPyth`
+are gone. `maxPriceAge` defaults to 3900 s for Chainlink feeds.
 
 The fixed contract also has an owner-only `refundStuckPull` for pulls whose
 callback never lands. There is no player-facing refund action: if a callback
 does not arrive, the pull stays pending on-chain and the owner can refund it.
 
-The retired interface (`pull()` with no args, `getFee`, `getRecentPulls`,
-`getPull`, `getStocks`, `owed`, keeper `setPrices`) is not used anywhere.
-
-`tokenInfo(token)` returns `(pythFeedId, decimals, supported)`. Pyth feed ids
-are read through it, which is why the price route works for any token the owner
-adds.
-
 ## How a pull works
 
-1. `usePull()` calls the server route `GET /api/price-update?chainId=143|10143`.
-   The route reads the machine's feed ids and asks Hermes for a signed update
-   with the server-only `PYTH_API_KEY`. The browser never sees the key.
-2. It reads `pullPrice` and the wallet's USDC allowance. If the allowance is
-   short it approves the exact `pullPrice`. A slow approval can outlive the
-   signed update, so the update is fetched again after approval.
-3. It reads `getTotalFee(updateData)` right before sending, simulates
-   `pull(random32, updateData)` (`random32` from `crypto.getRandomValues`) and
-   sends it with `value = getTotalFee(...)`.
-4. `pullId` and the Entropy `sequenceNumber` are decoded from the
+1. `usePull()` reads `pullPrice` and the wallet's USDC allowance. If the
+   allowance is short it approves the exact `pullPrice`.
+2. It reads `getFee()` immediately before sending, then simulates
+   `pull(random32)` (`random32` from `crypto.getRandomValues`) and sends it with
+   `value = getFee()`.
+3. `pullId` and the Entropy `sequenceNumber` are decoded from the
    `PullRequested` log in the receipt. The UI shows the drawing state.
-5. It polls `PullResolved` for that indexed `pullId` with `getLogs` from the
+4. It polls `PullResolved` for that indexed `pullId` with `getLogs` from the
    receipt block forward, in chunks of at most **100 blocks**, every 1.5 s for
    up to 120 s. No `eth_getLogs` range above 100 blocks is ever requested.
-6. The result card shows `stocks` / `amounts` (18-decimal formatting). The USD
-   value is computed from `getPullPriceSnapshot(pullId, token)`.
+5. The result card shows `stocks` / `amounts` (18-decimal formatting). The USD
+   value comes from `getPullPriceSnapshot(pullId, token)`, with
+   `getTokenPrice(token)` as a fallback.
 
 Reverts are mapped to player-friendly copy: insufficient inventory, insufficient
-fee, stale price, paused machine, user rejection, and low USDC allowance.
+fee, stale Chainlink price, paused machine, user rejection, and low USDC
+allowance.
 
-The button is **not** gated on `canPull()` or `getInventoryValue()`. Those read
-stored on-chain prices that may be stale, so they can report false or 0 even
-when a pull would succeed. Availability is computed from fresh prices instead:
-inventory USD = sum of `balanceOf(machine)` × fresh Pyth price over the
-supported tokens; the machine is pullable when that value covers
-`pullPrice × legendaryMultiplier + pendingReservations` and it is not paused.
+Availability is `canPull()` + `paused()`. Because the Chainlink contract reads
+live on-chain prices, the old Pyth stale-price caveat no longer applies.
+Inventory USD comes from `getInventoryValue()`; per-stock prices come from
+`getTokenPrice()`.
 
-## Server routes
-
-### `GET /api/price-update?chainId=143|10143`
-
-Reads `getSupportedTokens()` + `tokenInfo()` from the machine, then calls:
-
-```text
-GET https://pyth.dourolabs.app/hermes/v2/updates/price/latest
-    ?ids[]=<feedId>&encoding=hex&parsed=true
-Authorization: Bearer $PYTH_API_KEY
-```
-
-Response:
-
-```json
-{
-  "updateData": ["0x..."],
-  "prices": [
-    {
-      "token": "0x...",
-      "symbol": "TSLAx",
-      "feedId": "0x...",
-      "price": "42125000000",
-      "expo": -8,
-      "priceUsd6": "421250000",
-      "publishTime": 1793780300
-    }
-  ]
-}
-```
-
-`binary.data` is an array; every element becomes one `bytes` entry of
-`priceUpdateData` with a `0x` prefix. Errors are JSON with a useful status:
-`500 PRICE_KEY_MISSING`, `401/403 HERMES_NOT_ENTITLED`, `429 HERMES_RATE_LIMITED`,
-`502 HERMES_ERROR`, `503 MACHINE_NOT_CONFIGURED / NO_TOKENS`.
-
-The API key is never logged and never returned.
+## Server route for the live feed
 
 ### `GET /api/feed?chainId=143|10143`
 
@@ -192,8 +155,9 @@ poll.
   `pullPrice × legendaryMultiplier`, and the EV weights use
   `legendaryRarityBps`. There is no hardcoded 0.9154 or "$10".
 - **Live feed** merges `PullResolved` events with the player's own pull.
+- **Prices/inventory** use `getTokenPrice()` and `getInventoryValue()`.
 - **Claimable balance** uses `getOwedBalance(player)` and `withdrawOwed()`.
-- Footer copy: “Prices: Pyth price feeds. Randomness: Pyth Entropy.”
+- Footer copy: “Prices: Chainlink. Randomness: Pyth Entropy.”
 
 ## Mock mode
 
@@ -204,8 +168,9 @@ NEXT_PUBLIC_DEMO_MODE=mock bun run dev
 
 No wallet, RPC or contract is needed. Pulls resolve after a 1.5 s draw with the
 same 2% legendary odds as the contract, the wallet panel shows simulated
-balances, and the feed updates in memory. The mock uses TSLAx only to match the
-launch machine. This is the fastest way to work on UI and to demo offline.
+balances, and the feed updates in memory. The mock shows TSLAx, NVDAx and SPYx
+to match the launch list. This is the fastest way to work on UI and to demo
+offline.
 
 ## Panels preview
 
@@ -234,22 +199,23 @@ never opens a login modal.
 - Framework preset: Next.js
 - Package manager: Bun (`bun install`, `bun run build`)
 - Add every variable from the table above in Project Settings, including
-  `PYTH_API_KEY` (server-only) and `NEXT_PUBLIC_SITE_URL`.
+  `NEXT_PUBLIC_CLAW_MACHINE_MAINNET` and `NEXT_PUBLIC_SITE_URL`.
 - Add the Vercel domain as a Privy allowed origin.
+
+No Pyth price API key is needed for the deployment.
 
 ## Troubleshooting
 
-- **“Price feed offline”** — `/api/price-update` could not read the machine or
-  Hermes. Check that the machine address is set, `PYTH_API_KEY` is present in
-  the server environment, and the key is entitled to the machine's feeds.
-- **`HERMES_NOT_ENTITLED`** — the key is not entitled to one of the feed ids
-  returned by `tokenInfo`. The launch key is entitled only to TSLA/USD.
 - **“Machine not deployed”** — set the ClawMachine (and testnet USDC) env vars
   for the selected network and restart/rebuild. The app shows an explicit
   not-deployed notice with the required env names; it never reads a zero
   address.
 - **“Not enough USDC”** — on testnet use **Get test USDC**; on mainnet top up
   USDC in the connected wallet.
+- **“Machine refilling”** — `canPull()` is false: inventory does not cover the
+  legendary reserve, a Chainlink feed is stale, or the machine is paused.
+- **“Stale price” on a pull** — Chainlink has not updated within `maxPriceAge`
+  (3900 s by default). Try again once the feed updates.
 - **Wrong network banner** — click the switch button; the app reads state from
   the selected deployment chain even while the wallet is elsewhere.
 - **Pull stuck in “Drawing”** — Entropy callbacks usually land in a few

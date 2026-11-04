@@ -35,7 +35,7 @@ function buildFeed(now: number): FeedItem[] {
       pullId: "1042",
       player: ADDRESSES[0],
       legendary: true,
-      payouts: [{ symbol: "TSLAx", amount: "0.0237", usd: "$10.00" }],
+      payouts: [{ symbol: "NVDAx", amount: "0.0724", usd: "$10.00" }],
       valueUsd: "$10.00",
       resolvedAt: now - 38,
     },
@@ -43,7 +43,7 @@ function buildFeed(now: number): FeedItem[] {
       pullId: "1041",
       player: ADDRESSES[1],
       legendary: false,
-      payouts: [{ symbol: "TSLAx", amount: "0.0017", usd: "$0.73" }],
+      payouts: [{ symbol: "SPYx", amount: "0.0012", usd: "$0.73" }],
       valueUsd: "$0.73",
       resolvedAt: now - 140,
     },
@@ -51,7 +51,7 @@ function buildFeed(now: number): FeedItem[] {
       pullId: "1040",
       player: ADDRESSES[2],
       legendary: false,
-      payouts: [{ symbol: "TSLAx", amount: "0.0021", usd: "$0.73" }],
+      payouts: [{ symbol: "TSLAx", amount: "0.0017", usd: "$0.73" }],
       valueUsd: "$0.73",
       resolvedAt: now - 260,
     },
@@ -59,7 +59,7 @@ function buildFeed(now: number): FeedItem[] {
       pullId: "1039",
       player: ADDRESSES[3],
       legendary: false,
-      payouts: [{ symbol: "TSLAx", amount: "0.0017", usd: "$0.73" }],
+      payouts: [{ symbol: "NVDAx", amount: "0.0053", usd: "$0.73" }],
       valueUsd: "$0.73",
       resolvedAt: now - 420,
     },
@@ -67,7 +67,7 @@ function buildFeed(now: number): FeedItem[] {
       pullId: "1038",
       player: ADDRESSES[4],
       legendary: false,
-      payouts: [{ symbol: "TSLAx", amount: "0.0017", usd: "$0.73" }],
+      payouts: [{ symbol: "SPYx", amount: "0.0012", usd: "$0.73" }],
       valueUsd: "$0.73",
       resolvedAt: now - 610,
     },
@@ -75,7 +75,7 @@ function buildFeed(now: number): FeedItem[] {
       pullId: "1037",
       player: ADDRESSES[5],
       legendary: true,
-      payouts: [{ symbol: "TSLAx", amount: "0.0288", usd: "$10.00" }],
+      payouts: [{ symbol: "SPYx", amount: "0.0166", usd: "$10.00" }],
       valueUsd: "$10.00",
       resolvedAt: now - 840,
     },
@@ -91,7 +91,7 @@ function buildFeed(now: number): FeedItem[] {
       pullId: "1035",
       player: ADDRESSES[7],
       legendary: false,
-      payouts: [{ symbol: "TSLAx", amount: "0.0017", usd: "$0.73" }],
+      payouts: [{ symbol: "NVDAx", amount: "0.0053", usd: "$0.73" }],
       valueUsd: "$0.73",
       resolvedAt: now - 1_860,
     },
@@ -105,6 +105,11 @@ const ODDS_PROPS = {
   pullPriceUsd: "$1.00",
   inventoryUsd: "$1,284.20",
   totalPulls: "1,042",
+  prices: [
+    { symbol: "TSLAx", usd: "$421.25" },
+    { symbol: "NVDAx", usd: "$138.21" },
+    { symbol: "SPYx", usd: "$601.32" },
+  ],
 };
 
 function SectionHeading({
@@ -177,7 +182,7 @@ export default function PanelsPreviewPage() {
             <ResultCard
               legendary={false}
               payouts={[
-                { symbol: "TSLAx", amount: "0.0021", usd: "$0.73" },
+                { symbol: "NVDAx", amount: "0.0053", usd: "$0.73" },
               ]}
               valueUsd="$0.73"
               explorerUrl={`${EXPLORER}/tx/0x8f21c0d9a4e7b3f6c5d2a1e0b9c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3a2b1c0`}
@@ -186,7 +191,8 @@ export default function PanelsPreviewPage() {
             <ResultCard
               legendary
               payouts={[
-                { symbol: "TSLAx", amount: "0.0237", usd: "$10.00" },
+                { symbol: "TSLAx", amount: "0.0142", usd: "$5.98" },
+                { symbol: "NVDAx", amount: "0.0291", usd: "$4.02" },
               ]}
               valueUsd="$10.00"
               explorerUrl={`${EXPLORER}/tx/0x1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f809`}

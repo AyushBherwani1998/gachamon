@@ -78,7 +78,7 @@ export default function Home() {
     balances.mon !== undefined &&
     balances.mon < machine.entropyFee;
   const usdcReady = demo || isDeployed(deployment.usdc);
-  const machineReady = demo || (machine.isDeployed && machine.pullable);
+  const machineReady = demo || (machine.isDeployed && !machine.isLoading && machine.pullable);
   const pullPriceLabel = `Pull · ${usdPlain(machine.pullPrice ?? 1_000_000n)} USDC`;
   const gachaPhase = pull.phase === "preparing" ? "confirming" : pull.phase;
 
@@ -117,7 +117,14 @@ export default function Home() {
     if (machine.isLoading) return "Checking machine…";
     if (machine.paused) return "Machine paused";
     if (machine.error && machine.inventoryValueUsd6 === undefined) return "Price feed offline";
-    if (!machine.pullable) return "Machine refilling";
+    if (!machine.pullable) {
+      const shortInventory =
+        machine.inventoryValueUsd6 !== undefined &&
+        machine.legendaryPayout !== undefined &&
+        machine.inventoryValueUsd6 <
+          machine.legendaryPayout + (machine.reservedValueUsd6 ?? 0n);
+      return shortInventory ? "Machine refilling" : "Machine unavailable";
+    }
     if (pull.phase === "revealed") return "Pull again";
     if (pull.phase === "error") return "Try again";
     if (insufficientUsdc) return "Not enough USDC";
@@ -137,6 +144,8 @@ export default function Home() {
     machine.paused,
     machine.error,
     machine.inventoryValueUsd6,
+    machine.legendaryPayout,
+    machine.reservedValueUsd6,
     machine.pullable,
     pull.phase,
     pull.slow,
@@ -235,6 +244,13 @@ export default function Home() {
           : formatUsd6(machine.inventoryValueUsd6)
       }
       totalPulls={machine.totalPulls?.toLocaleString("en-US")}
+      prices={machine.stocks.map((stock, index) => ({
+        symbol: stock.symbol,
+        usd:
+          machine.prices[index] === undefined || machine.prices[index] === 0n
+            ? "—"
+            : formatUsd6(machine.prices[index]),
+      }))}
       loading={machine.isDeployed && machine.isLoading}
       statusLabel={notDeployed || machine.error ? "Offline" : undefined}
     />
