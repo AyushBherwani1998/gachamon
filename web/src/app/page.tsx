@@ -63,6 +63,13 @@ export default function Home() {
     machine.pullPrice !== undefined &&
     balances.usdc !== undefined &&
     balances.usdc < machine.pullPrice;
+  const insufficientMon =
+    !demo &&
+    isConnected &&
+    !wrongNetwork &&
+    machine.fee !== undefined &&
+    balances.mon !== undefined &&
+    balances.mon < machine.fee;
   const machineReady = demo || (machine.isDeployed && machine.canPull);
 
   const label = useMemo(() => {
@@ -79,10 +86,12 @@ export default function Home() {
     if (wrongNetwork) return `Switch to ${deployment.name}`;
     if (!machine.isDeployed) return "Machine not deployed";
     if (machine.isLoading) return "Checking machine…";
+    if (machine.paused) return "Machine paused";
     if (!machine.canPull) return "Machine refilling";
     if (pull.phase === "revealed") return "Pull again";
     if (pull.phase === "error") return "Try again";
     if (insufficientUsdc) return "Not enough USDC";
+    if (insufficientMon) return "Not enough MON";
     if (needsApproval) return "Approve USDC";
     return "Pull · 1 USDC";
   }, [
@@ -92,10 +101,12 @@ export default function Home() {
     wrongNetwork,
     machine.isDeployed,
     machine.isLoading,
+    machine.paused,
     machine.canPull,
     pull.phase,
     pull.slow,
     insufficientUsdc,
+    insufficientMon,
     needsApproval,
   ]);
 
@@ -103,7 +114,7 @@ export default function Home() {
     busy ||
     connecting ||
     (!demo && isConnected && !wrongNetwork && !machineReady) ||
-    (!demo && isConnected && !wrongNetwork && machineReady && insufficientUsdc);
+    (!demo && isConnected && !wrongNetwork && machineReady && (insufficientUsdc || insufficientMon));
 
   const handlePrimary = () => {
     if (busy) return;
@@ -117,7 +128,7 @@ export default function Home() {
       switchChain({ chainId: deployment.chainId });
       return;
     }
-    if (!demo && (!machine.isDeployed || !machineReady || insufficientUsdc)) return;
+    if (!demo && (!machine.isDeployed || !machineReady || insufficientUsdc || insufficientMon)) return;
     if (pull.phase === "revealed" || pull.phase === "error") {
       pull.reset();
     }
@@ -185,6 +196,12 @@ export default function Home() {
               disabled={disablePrimary}
               busy={busy || connecting}
             />
+
+            {needsApproval && !busy && !insufficientUsdc && !insufficientMon ? (
+              <p className="-mt-2 text-[10px] text-muted-foreground">
+                One approval covers 5 pulls.
+              </p>
+            ) : null}
 
             <p aria-live="polite" role="status" className="sr-only">
               {liveMessage}
