@@ -38,7 +38,7 @@ The xStocks are transferred automatically to the player's address (the caller of
 - Contract holds xStocks inventory (no DEX swap—no USDC→xStocks liquidity found on Monad)
 - Pulls disabled if inventory value < 10 USDC + pending reservations
 - Each pull reserves 10 USDC of inventory until resolved, then releases unused portion
-- Owner refills inventory with treasury USDC (off-chain purchase of xStocks, then transfer to contract)
+- Owner refills inventory: buy xStocks on Solana (deep liquidity, e.g. Jupiter by mint address), move them to Monad with the official xStocks bridge (Chainlink CCIP, Solana → Monad listed at `GET /api/v2/public/bridges?symbol=TSLAx`), then transfer to the contract. Monad DEX routes exist but are thin (SPYx quoted ~14% above the xStocks price on 4 Nov 2026).
 
 ## Architecture / Components
 
@@ -50,10 +50,12 @@ The xStocks are transferred automatically to the player's address (the caller of
 - Fallback to owed balance if transfer fails (withdrawal available)
 
 ### Price Keeper (Centralized)
-- Reads xStocks public API every minute: `https://api.xstocks.fi/api/v2`
-  - `/{symbol}/price-data`: Current price
-  - `/public/system/status/{symbol}`: Market halt status
-  - `/{symbol}/multiplier`: Corporate action multipliers
+- Reads xStocks public API every minute: `https://api.xstocks.fi/api/v2` (public, no API key; verified 4 Nov 2026)
+  - `/public/assets/{symbol}/price-data`: current price, e.g. `{"quote":379.175}`. Covers overnight/extended hours.
+  - `/public/system/status/{symbol}`: halt flags (`isMarketTradingHalted`, `isAtomicTradingHalted`, `allowedOperations`)
+  - `/public/assets/{symbol}/multiplier?network=Monad`: corporate-action multiplier (`network` is required, else 400)
+  - `/public/assets/{symbol}`: per-chain token addresses (`deployments[]`)
+  - Note: `/{symbol}/price-data` and `/{symbol}/multiplier` (without `/public/assets`) return 404.
 - Calls `setPrices()` on contract to update xStocks valuations
 - Future: Replace with Chainlink/Pyth oracle via `setOracle()` hook
 
@@ -109,7 +111,7 @@ sequenceDiagram
 
     Note over Keeper,xStocks API: Background price updates
     loop Every minute
-        Keeper->>xStocks API: GET /api/v2/{symbol}/price-data
+        Keeper->>xStocks API: GET /api/v2/public/assets/{symbol}/price-data
         xStocks API-->>Keeper: Price, status, multiplier
         Keeper->>ClawMachine: setPrices(symbols, prices)
     end
@@ -219,6 +221,8 @@ interface IClawMachine {
 
 ## Addresses (Monad Mainnet Chain 143)
 
+All xStocks addresses below match the official xStocks API (`/public/assets/{symbol}` → `deployments[]`, network `Monad`), verified 4 Nov 2026. Each is 18 decimals. AAPLx has no Monad DEX route but can be bridged in from Solana.
+
 | Asset/Contract | Address |
 |----------------|---------|
 | **USDC** | `0x754704Bc059F8C67012fEd69BC8A327a5aafb603` (6 decimals) |
@@ -231,13 +235,15 @@ interface IClawMachine {
 
 **RPC:** `https://rpc.monad.xyz`
 
-**Note:** Chainlink VRF is not supported on Monad, hence Pyth Entropy.
+**Note:** Chainlink VRF is not supported on Monad, hence Pyth Entropy. The same Entropy address is deployed on Monad testnet (chain 10143) with default provider `0x6CC14824Ea2918f5De5C2f75A9Da968ad4BD6344`. Mainnet `getFeeV2(gasLimit)`: 1.4 MON up to 800k gas, 1.48 MON at 1.2M.
+
+**Pyth price feeds (not used):** Hermes (`hermes.pyth.network`) returns 401 without an API key, and equity feeds can be stale outside US market hours, so pricing uses the xStocks API keeper instead.
 
 ## Risks & Pre-Demo Checks
 
 ### xStocks Transfer Risks
-- [ ] **Test tiny xStocks transfers to/from contract**: Possible allowlist/blacklist restrictions
-- [ ] **Corporate action multipliers**: xStocks may split/reverse-split (check `/api/v2/{symbol}/multiplier`)
+- [ ] **Test tiny xStocks transfers to/from contract**: xStocks docs state tokens are permissionless and freely transferable (no allowlist); confirm with the mainnet fork payout test
+- [ ] **Corporate action multipliers**: xStocks may split/reverse-split (check `/api/v2/public/assets/{symbol}/multiplier?network=Monad`; on EVM `balanceOf` already includes it)
 - [ ] **Market halts**: Trading halts would prevent transfers (check `/public/system/status/{symbol}`)
 - [ ] **Decimals**: Verify each xStocks token decimals (likely 18, but confirm)
 
@@ -249,7 +255,7 @@ interface IClawMachine {
 ### Monad-Specific Considerations
 - **Gas charged by LIMIT, not usage**: Set realistic gas limits; excess limit still costs gas
 - **Cold storage access**: 10,100 gas per cold SLOAD/SSTORE (vs 2,100 on Ethereum)
-- **Callback gas limit**: Must cover up to 4 cold ERC-20 transfers + logic (~50k+ gas recommended)
+- **Callback gas limit**: worst-case legendary payout across 4 stocks measured ~491k fully cold on Ethereum pricing, ~800k on Monad pricing. Use `callbackGasLimit = 1_200_000` (Entropy fee 1.48 MON vs 1.4 MON at ≤800k)
 - **Foundry compatibility**: Requires Foundry ≥1.8 for Monad support
 - **Viem compatibility**: Requires Viem ≥2.40 for proper Monad RPC handling
 
@@ -279,7 +285,7 @@ interface IClawMachine {
 - **Multi-sig treasury**: Distribute owner privileges to prevent single point of control
 
 ### Liquidity & Swaps
-- **DEX integration**: Once USDC↔xStocks liquidity exists on Monad, enable instant swaps instead of manual inventory refills
+- **DEX integration**: auto-refill inventory from Kuru order books on Monad (TSLAx/USDC and NVDAx/USDC books exist; liquidity is still thin)
 - **Automated market making**: Contract could LP on DEX to ensure liquidity for payouts
 
 ### Privacy
