@@ -212,10 +212,6 @@
       {
         "name": "userRandomNumber",
         "type": "bytes32"
-      },
-      {
-        "name": "priceUpdateData",
-        "type": "bytes[]"
       }
     ],
     "outputs": [
@@ -234,14 +230,9 @@
   },
   {
     "type": "function",
-    "name": "getPythFee",
+    "name": "getFee",
     "stateMutability": "view",
-    "inputs": [
-      {
-        "name": "priceUpdateData",
-        "type": "bytes[]"
-      }
-    ],
+    "inputs": [],
     "outputs": [
       {
         "name": "",
@@ -263,17 +254,21 @@
   },
   {
     "type": "function",
-    "name": "getTotalFee",
+    "name": "getTokenPrice",
     "stateMutability": "view",
     "inputs": [
       {
-        "name": "priceUpdateData",
-        "type": "bytes[]"
+        "name": "token",
+        "type": "address"
       }
     ],
     "outputs": [
       {
-        "name": "",
+        "name": "priceUsd6",
+        "type": "uint256"
+      },
+      {
+        "name": "updatedAt",
         "type": "uint256"
       }
     ]
@@ -446,8 +441,8 @@
     ],
     "outputs": [
       {
-        "name": "pythFeedId",
-        "type": "bytes32"
+        "name": "priceFeed",
+        "type": "address"
       },
       {
         "name": "decimals",
@@ -600,8 +595,8 @@
         "type": "address"
       },
       {
-        "name": "pythFeedId",
-        "type": "bytes32"
+        "name": "priceFeed",
+        "type": "address"
       }
     ],
     "outputs": []

@@ -174,7 +174,7 @@ export default function Home() {
   };
 
   const liveMessage = useMemo(() => {
-    if (pull.phase === "preparing") return "Fetching a fresh Pyth price update.";
+    if (pull.phase === "preparing") return "Preparing your pull.";
     if (pull.phase === "approving") return "Approving USDC. Confirm the approval in your wallet.";
     if (pull.phase === "confirming") return "Confirm the pull transaction in your wallet.";
     if (pull.phase === "drawing") {
@@ -221,7 +221,7 @@ export default function Home() {
 
               {machine.entropyFee !== undefined ? (
                 <p className="amount -mt-1 text-[10px] text-muted-foreground">
-                  + {formatMon(machine.entropyFee)} Pyth Entropy fee · Pyth update fee read at pull
+                  + {formatMon(machine.entropyFee)} Pyth Entropy fee
                 </p>
               ) : null}
 

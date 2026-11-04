@@ -46,7 +46,7 @@ export function SiteFooter() {
         </div>
       )}
       <p>
-        Prices: Pyth price feeds. Randomness: Pyth Entropy.{" "}
+        Prices: Chainlink. Randomness: Pyth Entropy.{" "}
         <a
           href={explorerAddress(deployment.key, PYTH_ENTROPY)}
           target="_blank"

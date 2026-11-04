@@ -1,13 +1,18 @@
 /**
- * ClawMachine ABI for Ayush's contract (PR #21) plus the Pyth/Entropy contracts
- * fix (`fix/claw-pyth-entropy`):
- * - pull(userRandomNumber, priceUpdateData) with Pyth price updates
- * - getTotalFee(priceUpdateData) = Pyth update fee + Entropy fee
+ * ClawMachine ABI for the Chainlink Data Feeds version of the contract
+ * (`fix/claw-pyth-entropy`):
+ * - pull(userRandomNumber) payable; Chainlink prices are read on-chain
+ * - getFee() = the Entropy fee (the whole msg.value)
+ * - getTokenPrice(token) = live Chainlink price per whole token, 6 decimals
+ * - tokenInfo(token) = (address priceFeed, uint8 decimals, bool supported)
+ * - canPull()/getInventoryValue() use live on-chain prices
  * - callbackGasLimit()/setCallbackGasLimit(uint32)
  * - _entropyCallback(...) is the IEntropyConsumer entry point (the web never calls it)
  *
- * Synced from `.agent-context/ClawMachine.abi.ts` and the fixed contract source.
- * Do not add the retired interface (pull(), getFee(), getRecentPulls, getPull,
+ * Hand-written until the contracts worker pushes
+ * `contracts/out/ClawMachine.sol/ClawMachine.json`; re-sync from that file.
+ * Do not add the retired Pyth price-update interface (bytes[] priceUpdateData,
+ * getPythFee, getTotalFee) or the old audited interface (getRecentPulls, getPull,
  * owed, keeper, setPrices).
  */
 export const clawMachineAbi = [
@@ -105,10 +110,7 @@ export const clawMachineAbi = [
     type: "function",
     name: "pull",
     stateMutability: "payable",
-    inputs: [
-      { name: "userRandomNumber", type: "bytes32" },
-      { name: "priceUpdateData", type: "bytes[]" },
-    ],
+    inputs: [{ name: "userRandomNumber", type: "bytes32" }],
     outputs: [{ name: "pullId", type: "uint256" }],
   },
   {
@@ -122,9 +124,9 @@ export const clawMachineAbi = [
   // View functions - fees and machine status
   {
     type: "function",
-    name: "getPythFee",
+    name: "getFee",
     stateMutability: "view",
-    inputs: [{ name: "priceUpdateData", type: "bytes[]" }],
+    inputs: [],
     outputs: [{ name: "", type: "uint256" }],
   },
   {
@@ -136,10 +138,13 @@ export const clawMachineAbi = [
   },
   {
     type: "function",
-    name: "getTotalFee",
+    name: "getTokenPrice",
     stateMutability: "view",
-    inputs: [{ name: "priceUpdateData", type: "bytes[]" }],
-    outputs: [{ name: "", type: "uint256" }],
+    inputs: [{ name: "token", type: "address" }],
+    outputs: [
+      { name: "priceUsd6", type: "uint256" },
+      { name: "updatedAt", type: "uint256" },
+    ],
   },
   {
     type: "function",
@@ -238,7 +243,7 @@ export const clawMachineAbi = [
     stateMutability: "view",
     inputs: [{ name: "token", type: "address" }],
     outputs: [
-      { name: "pythFeedId", type: "bytes32" },
+      { name: "priceFeed", type: "address" },
       { name: "decimals", type: "uint8" },
       { name: "supported", type: "bool" },
     ],
@@ -318,7 +323,7 @@ export const clawMachineAbi = [
     stateMutability: "nonpayable",
     inputs: [
       { name: "token", type: "address" },
-      { name: "pythFeedId", type: "bytes32" },
+      { name: "priceFeed", type: "address" },
     ],
     outputs: [],
   },

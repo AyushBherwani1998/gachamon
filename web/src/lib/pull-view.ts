@@ -3,7 +3,7 @@ import type { Address } from "viem";
 import type { GachaResult, GachaPayout } from "@/components/gacha";
 import type { FeedItem, PanelPayout } from "@/components/panels";
 import { formatTokenAmount, formatUsd6 } from "@/lib/format";
-import { tokenAmountTo18 } from "@/lib/prices";
+import { tokenAmountTo18 } from "@/lib/tokens";
 import type { MachineSnapshot, PullResult, RecentPull, TokenAmount } from "@/lib/types";
 
 /** Whole-dollar formatting used by the pixel machine (no leading $). */
