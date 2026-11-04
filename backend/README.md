@@ -459,12 +459,12 @@ The `backend/src/abi/ClawMachine.ts` file is **synced with the actual contract**
 - `pull(bytes32 userRandomNumber, bytes[] priceUpdateData)` - Pull function with Pyth price updates
 - `getTotalFee(bytes[])` - Returns Pyth fee + Entropy fee
 - `getPythFee(bytes[])`, `getEntropyFee()` - Individual fee queries
-- Pyth oracle integration at `0xACeA761c27A909d4D3895128EBe6370FDE2dF481`
+- Pyth oracle integration at `0xB754BA51E3861Ac0Cb67f73CD046dE790A36508d`
 - Price snapshots at pull request time for consistent callback execution
 
 **After contract deployment:**
 1. Set `CLAW_MACHINE_ADDRESS` in `.env` to the deployed contract address
-2. Verify `PYTH_PRICE_FEED_ADDRESS` matches the contract's Pyth oracle (default: `0xACeA761c27A909d4D3895128EBe6370FDE2dF481`)
+2. Verify `PYTH_PRICE_FEED_ADDRESS` matches the contract's Pyth oracle (default: `0xB754BA51E3861Ac0Cb67f73CD046dE790A36508d`)
 
 ### Dependencies on Contract
 

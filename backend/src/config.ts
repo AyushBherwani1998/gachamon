@@ -30,7 +30,7 @@ export const config = {
   clawMachineAddress: (process.env.CLAW_MACHINE_ADDRESS || '0x0000000000000000000000000000000000000000') as `0x${string}`,
   
   // Pyth contracts on Monad
-  pythPriceFeedAddress: (process.env.PYTH_PRICE_FEED_ADDRESS || '0xACeA761c27A909d4D3895128EBe6370FDE2dF481') as `0x${string}`,
+  pythPriceFeedAddress: (process.env.PYTH_PRICE_FEED_ADDRESS || '0xB754BA51E3861Ac0Cb67f73CD046dE790A36508d') as `0x${string}`,
   pythEntropyAddress: '0xD458261E832415CFd3BAE5E416FdF3230ce6F134' as `0x${string}`,
   
   // Pyth feed IDs for xStocks tokens (equity price feeds)
