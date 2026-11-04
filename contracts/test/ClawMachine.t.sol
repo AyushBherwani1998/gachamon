@@ -530,7 +530,7 @@ contract ClawMachineTest is Test {
     // Views and ring buffer
     // ---------------------------------------------------------------------
 
-    function testGetPricesMatchesGetStocksOrder() public {
+    function testGetPricesMatchesGetStocksOrder() public view {
         (uint256[] memory prices, uint256 updatedAt) = machine.getPrices();
         address[] memory tokens = machine.getStocks();
 
@@ -573,7 +573,7 @@ contract ClawMachineTest is Test {
         assertEq(p.valueUsd6, 0);
     }
 
-    function testInventoryValue() public {
+    function testInventoryValue() public view {
         uint256 expected = 4 * INVENTORY_USD6;
         assertApproxEqAbs(machine.inventoryValueUsd6(), expected, 16, "inventory value");
     }

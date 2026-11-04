@@ -51,7 +51,7 @@ contract DeployMainnet is Script {
     }
 
     /// @dev Comma separated address list, e.g. "0xabc...,0xdef...". Spaces are ignored.
-    function _parseStocks(string memory csv) internal view returns (address[] memory stocks) {
+    function _parseStocks(string memory csv) internal pure returns (address[] memory stocks) {
         bytes memory data = bytes(csv);
         uint256 count = 1;
         for (uint256 i = 0; i < data.length; ++i) {

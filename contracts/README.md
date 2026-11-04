@@ -11,6 +11,17 @@ claim step for successful transfers. If a stock transfer fails, the amount is re
 USD amounts use 6 decimals. Stock prices are USD per **whole** token, 6 decimals (xStocks have
 18 decimals on-chain).
 
+## Networks
+
+| | Mainnet | Testnet |
+|---|---|---|
+| chainId | 143 | 10143 |
+| RPC | `https://rpc.monad.xyz` | `https://testnet-rpc.monad.xyz` |
+| Explorer | `https://monadscan.com` | `https://testnet.monadscan.com` |
+| USDC | `0x754704Bc059F8C67012fEd69BC8A327a5aafb603` | MockUSDC (deployed by the script) |
+| Pyth Entropy V2 | `0xD458261E832415CFd3BAE5E416FdF3230ce6F134` | `0x825c0390f379C631f3Cf11A82a37D20BddF93c07` |
+| Entropy default provider | `0x52DeaA1c84233F7bb8C8A45baeDE41091c616506` | `0x6CC14824Ea2918f5De5C2f75A9Da968ad4BD6344` |
+
 ## Layout
 
 ```
@@ -146,10 +157,11 @@ Pull once from the CLI to sanity check the deployment:
 
 ```bash
 cast call <ClawMachine> "canPull()(bool)" --rpc-url monad_testnet
-cast call <ClawMachine> "getFee()(uint256)" --rpc-url monad_testnet   # ~0.128 MON for 800k gas
+FEE=$(cast call <ClawMachine> "getFee()(uint256)" --rpc-url monad_testnet | awk '{print $1}')
+echo "entropy fee: $FEE wei"   # ~0.128 MON for 800k gas on testnet
 cast send <MockUSDC> "approve(address,uint256)" <ClawMachine> 1000000 \
   --rpc-url monad_testnet --account player
-cast send <ClawMachine> "pull()" --value <fee-from-getFee> --rpc-url monad_testnet --account player
+cast send <ClawMachine> "pull()" --value "$FEE" --rpc-url monad_testnet --account player
 ```
 
 ## Deploy to Monad mainnet (chainId 143)
@@ -162,7 +174,7 @@ Environment variables (all optional):
 | Variable | Default | Meaning |
 |---|---|---|
 | `KEEPER` | deployer | address allowed to call `setPrices` |
-| `TREASURY` | deployer | address used by `withdrawUsdc` |
+| `TREASURY` | deployer | treasury address recorded on-chain; the owner passes it to `withdrawUsdc` |
 | `STOCKS` | TSLAx, NVDAx, SPYx | comma separated xStock addresses, max 8 |
 
 AAPLx is intentionally not in the default list: it has no usable liquidity on Monad today.
@@ -224,13 +236,13 @@ JSON. For testnet, build them from `deployments/monad-testnet.json`:
 ```bash
 USDC=$(jq -r .usdc deployments/monad-testnet.json)
 MACHINE=$(jq -r .clawMachine deployments/monad-testnet.json)
-STOCKS=$(jq -c .stocks deployments/monad-testnet.json)
+STOCKS=$(jq -r '.stocks | join(",")' deployments/monad-testnet.json)
 TREASURY=$(jq -r .treasury deployments/monad-testnet.json)
 KEEPER=$(jq -r .keeper deployments/monad-testnet.json)
 ENTROPY=$(jq -r .entropy deployments/monad-testnet.json)
 
 TESTNET_ARGS=$(cast abi-encode "constructor(address,address,address[],address,address)" \
-  "$USDC" "$ENTROPY" "$STOCKS" "$TREASURY" "$KEEPER")
+  "$USDC" "$ENTROPY" "[$STOCKS]" "$TREASURY" "$KEEPER")
 ```
 
 For mainnet:
