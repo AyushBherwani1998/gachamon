@@ -1,4 +1,4 @@
-import type { Address } from "viem";
+import { getAddress, type Address } from "viem";
 
 import { monadMainnet, monadTestnetChain, EXPLORERS } from "./chains";
 
@@ -31,8 +31,12 @@ export const USDC_MAINNET: Address = "0x754704Bc059F8C67012fEd69BC8A327a5aafb603
 export const PYTH_ENTROPY: Address = "0xD458261E832415CFd3BAE5E416FdF3230ce6F134";
 
 function envAddress(value: string | undefined, fallback: Address = ZERO_ADDRESS): Address {
-  if (value && /^0x[0-9a-fA-F]{40}$/.test(value)) return value as Address;
-  return fallback;
+  if (!value || !/^0x[0-9a-fA-F]{40}$/.test(value)) return fallback;
+  try {
+    return getAddress(value);
+  } catch {
+    return fallback;
+  }
 }
 
 const mainnetStocks: StockInfo[] = [
