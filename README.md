@@ -93,6 +93,7 @@ Requirements: [Foundry](https://book.getfoundry.sh/getting-started/installation)
 ```
 contracts/   ClawMachine, mocks, deploy scripts, tests
 web/         Next.js player app
+backend/     relay and indexer service (optional, not used by the live app)
 ```
 
 ### Contracts
@@ -150,6 +151,8 @@ bun run dev
 ```
 
 Open http://localhost:3000.
+
+`backend/` is optional; the live app reads pull history directly from the chain. See `backend/README.md` to run it.
 
 ## Team
 
