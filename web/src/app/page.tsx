@@ -305,7 +305,7 @@ export default function Home() {
               }
               totalPulls={machine.totalPulls?.toLocaleString("en-US")}
               loading={machine.isDeployed && machine.isLoading}
-              statusLabel={notDeployed ? "Offline" : undefined}
+              statusLabel={notDeployed || machine.error ? "Offline" : undefined}
             />
 
             <BalancesPanel />
