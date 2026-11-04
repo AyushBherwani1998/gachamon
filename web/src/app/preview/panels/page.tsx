@@ -105,6 +105,11 @@ const ODDS_PROPS = {
   pullPriceUsd: "$1.00",
   inventoryUsd: "$1,284.20",
   totalPulls: "1,042",
+  prices: [
+    { symbol: "TSLAx", usd: "$421.25" },
+    { symbol: "NVDAx", usd: "$138.21" },
+    { symbol: "SPYx", usd: "$601.32" },
+  ],
 };
 
 function SectionHeading({

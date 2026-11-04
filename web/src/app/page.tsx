@@ -315,6 +315,13 @@ export default function Home() {
                   : formatUsd6(machine.inventoryValueUsd6)
               }
               totalPulls={machine.totalPulls?.toLocaleString("en-US")}
+              prices={machine.stocks.map((stock, index) => ({
+                symbol: stock.symbol,
+                usd:
+                  machine.prices[index] === undefined || machine.prices[index] === 0n
+                    ? "—"
+                    : formatUsd6(machine.prices[index]),
+              }))}
               loading={machine.isDeployed && machine.isLoading}
               statusLabel={notDeployed || machine.error ? "Offline" : undefined}
             />
