@@ -49,6 +49,22 @@ The xStocks are transferred automatically to the player's address (the caller of
 - Handles direct xStocks transfers to players in callback
 - Fallback to owed balance if transfer fails (withdrawal available)
 
+### Backend (Transaction Relay & Indexer)
+- **Architecture:** Option A relay pattern
+  - Frontend builds and signs the full `pull()` transaction (player pays gas + fees in MON)
+  - Frontend POSTs the raw signed transaction hex to `POST /relay`
+  - Backend validates (chain ID, recipient, function selector, gas limit, rate limits) and broadcasts
+  - Backend never holds private keys or pays gas
+- **Endpoints:**
+  - `POST /relay`: Validate and broadcast signed transactions
+  - `GET /machine`: Live contract reads (canPull, inventory, fees)
+  - `GET /price-update`: Fetch Pyth price update data from Hermes API
+  - `GET /pulls/:id`, `GET /players/:address/pulls`, `GET /leaderboard`
+  - `WebSocket /events`: Real-time PullResolved events for reveal animations
+- **Event Indexer:** Watches ClawMachine events via WebSocket, backfills with getLogs (1000-block chunks for Monad range limits)
+- **Tech Stack:** Node 20, TypeScript, Hono, viem ≥2.40, SQLite (better-sqlite3)
+- See `backend/README.md` for full API documentation and frontend integration examples
+
 ### Price Keeper (Centralized)
 - Reads xStocks public API every minute: `https://api.xstocks.fi/api/v2` (public, no API key; verified 4 Nov 2026)
   - `/public/assets/{symbol}/price-data`: current price, e.g. `{"quote":379.175}`. Covers overnight/extended hours.
