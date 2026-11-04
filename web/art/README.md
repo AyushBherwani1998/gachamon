@@ -18,6 +18,7 @@ Assets:
 - `emblem_tsla`, `emblem_aapl`, `emblem_nvda`, `emblem_spy` — 16x16
 - `coin` 8x8, `spark` 4x4
 
-The card faces keep a transparent 16x16 window at (4, 6) for the emblem overlay
-in the UI. All assets use a transparent background and are displayed at integer
-scales only (2x, 3x, 4x) with `image-rendering: pixelated`.
+The card faces keep a plain 16x16 window at (4, 6) for the emblem overlay in
+the UI. Sprites are exported with transparent backgrounds (the card faces are
+full rectangles with their own dark border) and are displayed at integer scales
+only (2x, 3x, 4x) with `image-rendering: pixelated`.
