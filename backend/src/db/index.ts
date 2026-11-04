@@ -86,7 +86,9 @@ const updatePullResolvedStmt = db.prepare(`
 
 const markPullRefundedStmt = db.prepare(`
   UPDATE pulls
-  SET refunded = 1,
+  SET resolved = 1,
+      valueUsd6 = COALESCE(valueUsd6, '0'),
+      refunded = 1,
       refundAmount = ?,
       refundTxHash = ?,
       refundBlockNumber = ?,
