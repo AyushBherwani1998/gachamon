@@ -10,7 +10,10 @@ import {MockStock} from "../src/mocks/MockStock.sol";
 /// @notice Deploys the full testnet stack: MockUSDC, four MockStocks, ClawMachine.
 /// @dev    Run with: forge script script/DeployTestnet.s.sol --rpc-url monad_testnet --account deployer --broadcast
 contract DeployTestnet is Script {
-    address internal constant ENTROPY = 0xD458261E832415CFd3BAE5E416FdF3230ce6F134;
+    /// @dev Pyth Entropy V2 on Monad testnet. Note: this is a different deployment from
+    ///      mainnet (0xD458...), verified live on 2026-11-04. The default provider on
+    ///      testnet is 0x6CC14824Ea2918f5De5C2f75A9Da968ad4BD6344.
+    address internal constant ENTROPY = 0x825c0390f379C631f3Cf11A82a37D20BddF93c07;
 
     uint256 internal constant TSLA_PRICE = 250_000_000; // 250 USD
     uint256 internal constant AAPL_PRICE = 230_000_000; // 230 USD

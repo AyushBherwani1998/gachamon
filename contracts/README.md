@@ -22,6 +22,7 @@ contracts/
 │   └── pyth/                    vendored Pyth Entropy V2 SDK 2.2.1 (Apache-2.0)
 ├── test/
 │   ├── ClawMachine.t.sol        31 tests incl. payout split, owed path, gas, ring buffer
+│   ├── EntropyFork.t.sol        gated live Monad testnet Entropy request check
 │   └── MockEntropy.sol          test entropy contract
 ├── script/
 │   ├── DeployTestnet.s.sol      mocks + ClawMachine, seeds prices and ~500 USD inventory
@@ -51,7 +52,16 @@ forge build
 forge test
 ```
 
-Expected: build succeeds and `31 tests passed, 0 failed`.
+Expected: build succeeds, `31 tests passed, 0 failed`, and 1 skipped (the gated live-fork test).
+
+To run the live integration check against the deployed Monad testnet Entropy contract:
+
+```bash
+FORK_TEST=true forge test --match-path test/EntropyFork.t.sol -vv
+```
+
+It deploys mocks on a Monad testnet fork and makes a real `requestV2` call. The provider reveal
+happens in a later block, so the pull stays Pending in the fork test. Requires network access.
 
 Useful targets:
 
@@ -92,6 +102,11 @@ The testnet script deploys MockUSDC, four MockStocks (TSLAx/AAPLx/NVDAx/SPYx), a
 seeds 500 USD of each stock, sets prices (250/230/180/650 USD), sets `maxPriceAge` to 7 days,
 sets keeper = deployer, and writes `deployments/monad-testnet.json`.
 
+Pyth Entropy V2 is at `0x825c0390f379C631f3Cf11A82a37D20BddF93c07` on Monad **testnet**
+(mainnet uses `0xD458261E832415CFd3BAE5E416FdF3230ce6F134`; they are different deployments).
+The testnet fee is dynamic and currently ~0.128 MON for an 800k callback, not 1 wei. Always
+read `getFee()` / `getFeeV2(callbackGasLimit)` before pulling.
+
 ```bash
 # one-time: import a funded testnet key into a keystore named "deployer"
 cast wallet import deployer --interactive
@@ -131,10 +146,10 @@ Pull once from the CLI to sanity check the deployment:
 
 ```bash
 cast call <ClawMachine> "canPull()(bool)" --rpc-url monad_testnet
-cast call <ClawMachine> "getFee()(uint256)" --rpc-url monad_testnet   # 1 wei on testnet
+cast call <ClawMachine> "getFee()(uint256)" --rpc-url monad_testnet   # ~0.128 MON for 800k gas
 cast send <MockUSDC> "approve(address,uint256)" <ClawMachine> 1000000 \
   --rpc-url monad_testnet --account player
-cast send <ClawMachine> "pull()" --value 1 --rpc-url monad_testnet --account player
+cast send <ClawMachine> "pull()" --value <fee-from-getFee> --rpc-url monad_testnet --account player
 ```
 
 ## Deploy to Monad mainnet (chainId 143)
@@ -204,7 +219,21 @@ script raises the limit to 7 days for demos.
 ## Verification
 
 Constructor arguments are printed by both deploy scripts (ABI encoded) and stored in the deployment
-JSON. Build them again if needed:
+JSON. For testnet, build them from `deployments/monad-testnet.json`:
+
+```bash
+USDC=$(jq -r .usdc deployments/monad-testnet.json)
+MACHINE=$(jq -r .clawMachine deployments/monad-testnet.json)
+STOCKS=$(jq -c .stocks deployments/monad-testnet.json)
+TREASURY=$(jq -r .treasury deployments/monad-testnet.json)
+KEEPER=$(jq -r .keeper deployments/monad-testnet.json)
+ENTROPY=$(jq -r .entropy deployments/monad-testnet.json)
+
+TESTNET_ARGS=$(cast abi-encode "constructor(address,address,address[],address,address)" \
+  "$USDC" "$ENTROPY" "$STOCKS" "$TREASURY" "$KEEPER")
+```
+
+For mainnet:
 
 ```bash
 ARGS=$(cast abi-encode "constructor(address,address,address[],address,address)" \
@@ -222,7 +251,7 @@ forge verify-contract <ClawMachine> src/ClawMachine.sol:ClawMachine \
   --chain 10143 \
   --verifier sourcify \
   --verifier-url "https://sourcify-api-monad.blockvision.org/" \
-  --constructor-args "$ARGS"
+  --constructor-args "$TESTNET_ARGS"
 
 # mainnet
 forge verify-contract <ClawMachine> src/ClawMachine.sol:ClawMachine \
@@ -252,7 +281,7 @@ jq -n \
   --arg compilerVersion "v0.8.28+commit.7893614a" \
   --slurpfile input /tmp/standard-input.json \
   --slurpfile meta /tmp/metadata.json \
-  --arg constructorArgs "${ARGS#0x}" \
+  --arg constructorArgs "${TESTNET_ARGS#0x}" \
   '{chainId: $chainId, contractAddress: $contractAddress, contractName: $contractName,
     compilerVersion: $compilerVersion, standardJsonInput: $input[0],
     foundryMetadata: $meta[0], constructorArgs: $constructorArgs}' > /tmp/verify.json
@@ -262,8 +291,9 @@ curl -X POST https://agents.devnads.com/v1/verify \
   -d @/tmp/verify.json
 ```
 
-Use `chainId` 10143 for testnet and 143 for mainnet. Mocks are verified the same way without
-constructor args (`MockStock` takes `(string,string)`).
+The example is for testnet. For mainnet set `chainId` to 143 and use `${ARGS#0x}` as
+`constructorArgs`. Mocks are verified the same way without constructor args (`MockStock` takes
+`(string,string)`).
 
 ## ABIs
 
