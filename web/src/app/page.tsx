@@ -181,13 +181,13 @@ export default function Home() {
   };
 
   const liveMessage = useMemo(() => {
-    if (pull.phase === "preparing") return "Fetching a fresh Pyth price update.";
+    if (pull.phase === "preparing") return "Preparing your pull.";
     if (pull.phase === "approving") return "Approving USDC. Confirm the approval in your wallet.";
     if (pull.phase === "confirming") return "Confirm the pull transaction in your wallet.";
     if (pull.phase === "drawing") {
       return pull.slow
         ? "Still waiting for Pyth Entropy. The pull is pending; keep this page open."
-        : "Drawing your card. Waiting for Pyth Entropy randomness.";
+        : "Drawing your stocks. Waiting for Pyth Entropy randomness.";
     }
     if (pull.phase === "revealed" && pull.result) {
       // The stock stays secret until the pack is torn.
@@ -196,7 +196,8 @@ export default function Home() {
         return "Pull resolved. No stock payout was recorded.";
       }
       const symbols = pull.result.stocks.map((stock) => stock.symbol).join(", ");
-      return `${pull.result.legendary ? "Legendary" : "Rare"} pull! You received ${symbols} worth ${formatUsd6(resultValue ?? 0n)}.`;
+      const stockCount = pull.result.stocks.length;
+      return `${pull.result.legendary ? "Legendary" : "Common"} pull! You received ${stockCount} ${stockCount === 1 ? "stock" : "stocks"}: ${symbols} worth ${formatUsd6(resultValue ?? 0n)}.`;
     }
     if (pull.phase === "error" && pull.error) return `Pull failed: ${pull.error}`;
     return "";
@@ -299,7 +300,7 @@ export default function Home() {
 
               {machine.entropyFee !== undefined ? (
                 <p className="amount -mt-1 text-[10px] text-muted-foreground">
-                  + {formatMon(machine.entropyFee)} Pyth Entropy fee · Pyth update fee read at pull
+                  + {formatMon(machine.entropyFee)} Pyth Entropy fee
                 </p>
               ) : null}
 

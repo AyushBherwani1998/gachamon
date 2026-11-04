@@ -1,14 +1,12 @@
 /**
- * ClawMachine ABI for Ayush's contract (PR #21) plus the Pyth/Entropy contracts
- * fix (`fix/claw-pyth-entropy`):
- * - pull(userRandomNumber, priceUpdateData) with Pyth price updates
- * - getTotalFee(priceUpdateData) = Pyth update fee + Entropy fee
- * - callbackGasLimit()/setCallbackGasLimit(uint32)
- * - _entropyCallback(...) is the IEntropyConsumer entry point (the web never calls it)
+ * ClawMachine ABI for PR #27 (multi-token stock pulls):
+ * - pull(userRandomNumber) payable with Entropy fee from getFee()
+ * - PullResolved event with address[] stocks and uint256[] amounts
+ * - Uses Chainlink AggregatorV3 price feeds (no Pyth prices)
+ * - Pyth Entropy V2 for randomness via entropyCallback
  *
- * Synced from `.agent-context/ClawMachine.abi.ts` and the fixed contract source.
- * Do not add the retired interface (pull(), getFee(), getRecentPulls, getPull,
- * owed, keeper, setPrices).
+ * Synced from PR #27 contracts/src/ClawMachine.sol
+ * Contract address configurable via NEXT_PUBLIC_CLAW_MACHINE_MAINNET env var
  */
 export const clawMachineAbi = [
   // Events
@@ -107,7 +105,6 @@ export const clawMachineAbi = [
     stateMutability: "payable",
     inputs: [
       { name: "userRandomNumber", type: "bytes32" },
-      { name: "priceUpdateData", type: "bytes[]" },
     ],
     outputs: [{ name: "pullId", type: "uint256" }],
   },
@@ -122,13 +119,6 @@ export const clawMachineAbi = [
   // View functions - fees and machine status
   {
     type: "function",
-    name: "getPythFee",
-    stateMutability: "view",
-    inputs: [{ name: "priceUpdateData", type: "bytes[]" }],
-    outputs: [{ name: "", type: "uint256" }],
-  },
-  {
-    type: "function",
     name: "getEntropyFee",
     stateMutability: "view",
     inputs: [],
@@ -136,9 +126,9 @@ export const clawMachineAbi = [
   },
   {
     type: "function",
-    name: "getTotalFee",
+    name: "getFee",
     stateMutability: "view",
-    inputs: [{ name: "priceUpdateData", type: "bytes[]" }],
+    inputs: [],
     outputs: [{ name: "", type: "uint256" }],
   },
   {
@@ -238,7 +228,7 @@ export const clawMachineAbi = [
     stateMutability: "view",
     inputs: [{ name: "token", type: "address" }],
     outputs: [
-      { name: "pythFeedId", type: "bytes32" },
+      { name: "priceFeed", type: "address" },
       { name: "decimals", type: "uint8" },
       { name: "supported", type: "bool" },
     ],
@@ -298,13 +288,6 @@ export const clawMachineAbi = [
   },
   {
     type: "function",
-    name: "pyth",
-    stateMutability: "view",
-    inputs: [],
-    outputs: [{ name: "", type: "address" }],
-  },
-  {
-    type: "function",
     name: "owner",
     stateMutability: "view",
     inputs: [],
@@ -318,7 +301,7 @@ export const clawMachineAbi = [
     stateMutability: "nonpayable",
     inputs: [
       { name: "token", type: "address" },
-      { name: "pythFeedId", type: "bytes32" },
+      { name: "priceFeed", type: "address" },
     ],
     outputs: [],
   },
@@ -407,7 +390,7 @@ export const clawMachineAbi = [
   // Pyth Entropy callback (IEntropyConsumer). Internal to the contract.
   {
     type: "function",
-    name: "_entropyCallback",
+    name: "entropyCallback",
     stateMutability: "nonpayable",
     inputs: [
       { name: "sequence", type: "uint64" },

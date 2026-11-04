@@ -4,7 +4,7 @@ export interface StockMeta {
   address: Address;
   symbol: string;
   decimals: number;
-  /** Pyth feed id (bytes32) from `tokenInfo(token)`. */
+  /** Chainlink price feed address (or legacy Pyth feed id) from `tokenInfo(token)`. */
   feedId: Hex;
 }
 
@@ -42,7 +42,7 @@ export interface MachineSnapshot {
   totalPulls?: bigint;
   inventoryValueUsd6?: bigint;
   reservedValueUsd6?: bigint;
-  /** Entropy fee in MON from `getEntropyFee()`. The Pyth update fee is added per pull. */
+  /** Entropy fee in MON from `getEntropyFee()`. */
   entropyFee?: bigint;
   /** Latest Pyth publish time across the fetched feeds, unix seconds. */
   pricesUpdatedAt?: bigint;

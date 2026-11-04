@@ -9,7 +9,7 @@ import { erc20Abi } from "@/abi/erc20";
 import { deployment, isDeployed, IS_DEMO_MODE } from "@/config/deployments";
 import { friendlyTxError } from "@/lib/errors";
 import { drawMockPull } from "@/lib/mock";
-import { fetchPriceUpdate, tokenAmountTo18 } from "@/lib/prices";
+import { tokenAmountTo18 } from "@/lib/prices";
 import type { PullPhase, PullResult, PullState, TokenAmount } from "@/lib/types";
 import { shortAddress } from "@/lib/format";
 
@@ -133,11 +133,7 @@ export function usePull(): PullState {
     setPhase("preparing");
 
     try {
-      // 1. Fresh signed Pyth update from the server proxy (key stays server-side).
-      const priceUpdate = await fetchPriceUpdate(deployment.chainId);
-      if (runId.current !== currentRun) return;
-      let updateData = priceUpdate.updateData;
-
+      // 1. Read pull price and allowance
       const [pullPrice, allowance] = await Promise.all([
         publicClient.readContract({
           address: deployment.clawMachine,
@@ -174,25 +170,16 @@ export function usePull(): PullState {
       if (runId.current !== currentRun) return;
       setPhase("confirming");
 
-      // An approval can take minutes; Pyth updates are only valid for the
-      // contract's maxPriceAge (60 s by default). Refresh after approval.
-      if (approved) {
-        const refreshed = await fetchPriceUpdate(deployment.chainId);
-        if (runId.current !== currentRun) return;
-        updateData = refreshed.updateData;
-      }
-
-      // 3. Read the total fee immediately before sending; the first read may be
-      // stale after a slow approval. Simulate, then send pull(random, update).
+      // 3. Read the Entropy fee immediately before sending; the first read may be
+      // stale after a slow approval. Simulate, then send pull(random).
       const fee = await publicClient.readContract({
         address: deployment.clawMachine,
         abi: clawMachineAbi,
-        functionName: "getTotalFee",
-        args: [updateData],
+        functionName: "getFee",
       });
 
       const userRandomNumber = toHex(crypto.getRandomValues(new Uint8Array(32)));
-      const args = [userRandomNumber, updateData] as const;
+      const args = [userRandomNumber] as const;
 
       await publicClient.simulateContract({
         address: deployment.clawMachine,
