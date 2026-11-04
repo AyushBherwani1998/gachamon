@@ -813,9 +813,21 @@ contract ClawMachine is IEntropyConsumer, ReentrancyGuard, Pausable, Ownable {
             remainingUSDC -= allocation;
         }
 
-        // Redistribute remainder
+        // Redistribute remainder across the selected tokens
         for (uint256 i = 0; i < numTokens && remainingUSDC > 0; i++) {
             if (!includeToken[i] || allocatedUSDC[i] >= capacities[i]) continue;
+
+            uint256 spare = capacities[i] - allocatedUSDC[i];
+            uint256 extra = remainingUSDC < spare ? remainingUSDC : spare;
+            allocatedUSDC[i] += extra;
+            remainingUSDC -= extra;
+        }
+
+        // Then draw from unselected tokens that still hold inventory. Otherwise a
+        // capped selection would leave the machine's stock untouched and record an
+        // IOU even though it could pay the player in full.
+        for (uint256 i = 0; i < numTokens && remainingUSDC > 0; i++) {
+            if (includeToken[i] || allocatedUSDC[i] >= capacities[i]) continue;
 
             uint256 spare = capacities[i] - allocatedUSDC[i];
             uint256 extra = remainingUSDC < spare ? remainingUSDC : spare;

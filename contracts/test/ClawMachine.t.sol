@@ -967,3 +967,129 @@ contract ClawMachineTest is Test {
         assertLt(gasUsed, 500_000, "Legendary callback should fit in 500k gas");
     }
 }
+
+/// @dev Regression coverage for remainder redistribution across unselected tokens.
+contract ClawMachineRedistributionTest is Test {
+    ClawMachine public claw;
+    MockERC20 public usdc;
+    MockEntropy public entropy;
+    MockERC20 public tsla;
+    MockERC20 public nvda;
+    MockERC20 public spy;
+    MockERC20 public qqq;
+    MockERC20 public spcx;
+    MockPriceFeed public tslaFeed;
+    MockPriceFeed public nvdaFeed;
+    MockPriceFeed public spyFeed;
+    MockPriceFeed public qqqFeed;
+    MockPriceFeed public spcxFeed;
+
+    address public owner = address(0x1);
+    address public player = address(0x3);
+
+    uint256 constant PULL_PRICE = 1_000000;
+    uint256 constant ENTROPY_FEE = 0.001 ether;
+
+    function setUp() public {
+        usdc = new MockERC20("USDC", "USDC", 6);
+        entropy = new MockEntropy();
+        tsla = new MockERC20("TSLAx", "TSLAx", 18);
+        nvda = new MockERC20("NVDAx", "NVDAx", 18);
+        spy = new MockERC20("SPYx", "SPYx", 18);
+        qqq = new MockERC20("QQQx", "QQQx", 18);
+        spcx = new MockERC20("SPCXx", "SPCXx", 18);
+
+        tslaFeed = new MockPriceFeed(250e8, 8);
+        nvdaFeed = new MockPriceFeed(500e8, 8);
+        spyFeed = new MockPriceFeed(400e8, 8);
+        qqqFeed = new MockPriceFeed(300e8, 8);
+        spcxFeed = new MockPriceFeed(100e8, 8);
+
+        vm.prank(owner);
+        claw = new ClawMachine(address(usdc), address(entropy), owner);
+
+        vm.startPrank(owner);
+        claw.addToken(address(tsla), address(tslaFeed));
+        claw.addToken(address(nvda), address(nvdaFeed));
+        claw.addToken(address(spy), address(spyFeed));
+        claw.addToken(address(qqq), address(qqqFeed));
+        claw.addToken(address(spcx), address(spcxFeed));
+        vm.stopPrank();
+
+        // Enough inventory to pass the pre-pull check.
+        tsla.mint(address(claw), 0.02 ether);
+        nvda.mint(address(claw), 0.01 ether);
+        spy.mint(address(claw), 0.0125 ether);
+
+        usdc.mint(player, 100_000000);
+        vm.deal(player, 10 ether);
+    }
+
+    /// @notice The selected tokens are capped, so the payout must come from an
+    ///         unselected token instead of becoming an IOU on an empty one.
+    function test_RemainderUsesUnselectedTokenWithCapacity() public {
+        vm.prank(player);
+        usdc.approve(address(claw), PULL_PRICE);
+
+        vm.prank(player);
+        uint256 pullId = claw.pull{value: ENTROPY_FEE}(bytes32(uint256(12345)));
+
+        // Lopsided inventory after the request: TSLA $0.05, NVDA $8, SPY $0.04,
+        // QQQ $0 and SPCX $0. The selected TSLA + SPY cannot cover $0.73.
+        _drainInventory();
+        tsla.mint(address(claw), 0.0002 ether); // $0.05
+        nvda.mint(address(claw), 0.016 ether); // $8.00
+        spy.mint(address(claw), 0.0001 ether); // $0.04
+
+        // Force the selection to include TSLA and SPY but not NVDA.
+        entropy.fulfillRequest(1, bytes32(_findTslaSpySelectionSeed()));
+
+        (address[] memory owedTokens, ) = claw.getOwedBalance(player);
+        assertEq(owedTokens.length, 0, "full inventory must not create an IOU");
+
+        assertEq(tsla.balanceOf(player), 0.0002 ether, "TSLA paid up to capacity");
+        assertEq(spy.balanceOf(player), 0.0001 ether, "SPY paid up to capacity");
+        assertEq(nvda.balanceOf(player), 0.00128 ether, "NVDA covered the remainder");
+        assertEq(qqq.balanceOf(player), 0, "empty QQQx pays nothing");
+        assertEq(spcx.balanceOf(player), 0, "empty SPCXx pays nothing");
+
+        uint256 payoutValue = tsla.balanceOf(player) * claw.getPullPriceSnapshot(pullId, address(tsla)) / 1e18
+            + nvda.balanceOf(player) * claw.getPullPriceSnapshot(pullId, address(nvda)) / 1e18
+            + spy.balanceOf(player) * claw.getPullPriceSnapshot(pullId, address(spy)) / 1e18;
+        assertEq(payoutValue, 730_000, "player receives the full payout value");
+    }
+
+    function _drainInventory() internal {
+        address[5] memory tokens = [address(tsla), address(nvda), address(spy), address(qqq), address(spcx)];
+        vm.startPrank(owner);
+        for (uint256 i = 0; i < tokens.length; i++) {
+            uint256 balance = IERC20(tokens[i]).balanceOf(address(claw));
+            if (balance > 0) {
+                claw.withdrawInventory(tokens[i], balance);
+            }
+        }
+        vm.stopPrank();
+    }
+
+    /// @dev Mirrors `_selectTokensForPull` for the three funded tokens and returns
+    ///      a random number whose common selection is exactly TSLA + SPY.
+    function _findTslaSpySelectionSeed() internal pure returns (uint256) {
+        for (uint256 r = 200; r < 10_000; r++) {
+            bytes32 randomNumber = bytes32(r);
+            uint256 targetCount = 2 + (uint256(keccak256(abi.encode(randomNumber, "count"))) % 2);
+            if (targetCount != 2) continue;
+
+            uint256[3] memory availableIndices = [uint256(0), 1, 2];
+            bool[3] memory picked;
+            for (uint256 i = 0; i < targetCount; i++) {
+                bytes32 pickSeed = keccak256(abi.encode(randomNumber, "pick", i));
+                uint256 pickIdx = uint256(pickSeed) % (3 - i);
+                picked[availableIndices[pickIdx]] = true;
+                availableIndices[pickIdx] = availableIndices[3 - i - 1];
+            }
+
+            if (picked[0] && !picked[1] && picked[2]) return r;
+        }
+        revert("No suitable random number");
+    }
+}
