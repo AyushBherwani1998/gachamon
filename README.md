@@ -4,13 +4,15 @@
 
 Gachamon is a pixel-art pack machine on Monad mainnet. Pay 1 USDC, a Rare or Legendary pack drops, tear it open, and real tokenized stocks (xStocks) land in your wallet. Prices come from Chainlink Data Feeds on-chain, randomness from Pyth Entropy V2, and the stock is paid out inside the Entropy callback, so there is no claim step.
 
+Forked from [monad-developers/monad-blitz-devcon-mumbai](https://github.com/monad-developers/monad-blitz-devcon-mumbai) for Monad Blitz Mumbai [Devcon Edition].
+
 Built at Monad Blitz, Devcon Mumbai 2026.
 
 ## Live
 
 | | |
 |---|---|
-| **App** | https://gacha-mon.xyz (backup: https://claw-web-production-312b.up.railway.app) |
+| **App** | https://gacha-mon.xyz (custom domain) (backup: https://claw-web-production-312b.up.railway.app) |
 | **Contract** | `ClawMachine` — [`0xbC4e651C6326Ecb440b8bF54033f2ed4323C9c72`](https://monadscan.com/address/0xbC4e651C6326Ecb440b8bF54033f2ed4323C9c72) on Monad mainnet (chain 143) |
 | **Source** | Verified — exact match on [Sourcify (BlockVision)](https://sourcify-api-monad.blockvision.org/v2/contract/143/0xbC4e651C6326Ecb440b8bF54033f2ed4323C9c72) |
 | **Deploy tx** | [`0x2788b3f4444ea078582c127889bbeb89ab7a0024f71e5b53bcce5a5b4d89fdfc`](https://monadscan.com/tx/0x2788b3f4444ea078582c127889bbeb89ab7a0024f71e5b53bcce5a5b4d89fdfc), block 119302850 |
@@ -170,6 +172,29 @@ bun run dev
 Open http://localhost:3000.
 
 `backend/` is optional; the live app reads pull history directly from the chain. See `backend/README.md` to run it.
+
+## Business model
+
+- Revenue comes from the house edge: each 1 USDC pull returns $0.9154 of expected stock value, so the machine keeps about 8.46% per pull, and the USDC stays in the contract as treasury.
+- Inventory is real xStocks held by the machine. Payouts never exceed what it holds, and the owner restocks it.
+- It scales by adding any xStock that has a Chainlink feed on Monad. Five are supported today.
+
+## Monad Blitz rubric
+
+| Item | Status | Evidence |
+|---|---|---|
+| Forked GitHub repo | Done | Fork of [monad-developers/monad-blitz-devcon-mumbai](https://github.com/monad-developers/monad-blitz-devcon-mumbai) |
+| README with live page and contract address | Done | See Live and Contract addresses above |
+| Contracts deployed on Monad Testnet | Mainnet instead | Deployed on Monad mainnet (below). `contracts/script/DeployTestnet.s.sol` deploys the same machine against testnet Entropy `0x825c0390f379C631f3Cf11A82a37D20BddF93c07` |
+| Project publicly hosted | Done | https://gacha-mon.xyz |
+| All announced functions working | Done | Pay 1 USDC → Pyth Entropy randomness → Chainlink-priced xStock payout inside the callback. Three real mainnet pulls so far, visible in the site's live feed |
+| Live transaction on chain | Done | Proof pulls listed below, plus a live pull during the demo |
+| Contract verified | Done | [Sourcify exact match](https://sourcify-api-monad.blockvision.org/v2/contract/143/0xbC4e651C6326Ecb440b8bF54033f2ed4323C9c72) |
+| Runnable from the README | Done | See Run it: 42 contract tests, including 7 mainnet fork tests, plus a web app with `bun run dev` |
+| Post on X | Done | https://x.com/TheRealRajdeep/status/2117941252411056131 |
+| Demo video | Done | Video attached to the post above |
+| Contracts on Monad mainnet (bonus) | Done | `0xbC4e651C6326Ecb440b8bF54033f2ed4323C9c72` |
+| Custom domain (bonus) | Done | https://gacha-mon.xyz |
 
 ## Team
 
