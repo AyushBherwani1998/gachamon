@@ -12,11 +12,11 @@ interface RecentPullsProps {
 export function RecentPulls({ pulls, player }: RecentPullsProps) {
   return (
     <Card className="w-full" font="normal">
-      <CardHeader className="flex flex-row items-center justify-between pb-2">
+      <CardHeader font="normal" className="flex flex-row items-center justify-between pb-2">
         <CardTitle className="retro text-[10px]">RECENT PULLS</CardTitle>
         <span className="amount text-[10px] text-muted-foreground">{pulls.length} shown</span>
       </CardHeader>
-      <CardContent>
+      <CardContent font="normal">
         {pulls.length === 0 ? (
           <p className="py-4 text-center text-[11px] text-muted-foreground">
             No pulls yet. Be the first.

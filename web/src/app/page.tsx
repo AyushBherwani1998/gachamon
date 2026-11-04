@@ -158,12 +158,26 @@ export default function Home() {
                   {formatUsd6(machine.inventoryValueUsd6)}
                 </span>
               </span>
-              <span className={machine.canPull || demo ? "text-primary" : "text-destructive"}>
-                {machine.isLoading ? "SYNCING" : machine.canPull || demo ? "READY" : "REFILLING"}
+              <span
+                className={
+                  machine.canPull || demo
+                    ? "text-primary"
+                    : machine.isDeployed
+                      ? "text-destructive"
+                      : "text-[#ffd45f]"
+                }
+              >
+                {!machine.isDeployed && !demo
+                  ? "NOT DEPLOYED"
+                  : machine.isLoading
+                    ? "SYNCING"
+                    : machine.canPull || demo
+                      ? "READY"
+                      : "REFILLING"}
               </span>
             </div>
 
-            <GachaMachine phase={pull.phase} legendary={pull.result?.legendary} label={machineLabel(pull.phase)} />
+            <GachaMachine phase={pull.phase} result={pull.result} label={machineLabel(pull.phase)} />
 
             <PullButton
               label={label}
@@ -179,7 +193,7 @@ export default function Home() {
             <div className="flex w-full max-w-sm flex-col items-center gap-3">
               {pull.phase === "drawing" || pull.phase === "confirming" ? (
                 <Card className="w-full" font="normal">
-                  <CardContent className="flex flex-col gap-2 py-4 text-center">
+                  <CardContent font="normal" className="flex flex-col gap-2 py-4 text-center">
                     <p className="retro text-[10px] text-primary">DRAWING…</p>
                     <p className="text-[11px] text-muted-foreground">
                       {pull.slow
@@ -198,7 +212,7 @@ export default function Home() {
                 <ResultCard result={pull.result} />
               ) : pull.phase === "error" ? (
                 <Card className="w-full border-x-4 border-destructive" font="normal">
-                  <CardContent className="flex flex-col gap-2 py-4">
+                  <CardContent font="normal" className="flex flex-col gap-2 py-4">
                     <p className="retro text-[10px] text-destructive">PULL FAILED</p>
                     <p className="text-[11px] text-muted-foreground" role="alert">
                       {pull.error}

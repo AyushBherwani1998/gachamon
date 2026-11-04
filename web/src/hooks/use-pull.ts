@@ -191,13 +191,24 @@ export function usePull(): PullState {
 
       const startedAt = Date.now();
       let resolved = false;
+      let markedSlow = false;
+      let pollFailures = 0;
       while (runId.current === currentRun) {
-        const pull = await publicClient.readContract({
-          address: deployment.clawMachine,
-          abi: clawMachineAbi,
-          functionName: "getPull",
-          args: [nextPullId],
-        });
+        let pull;
+        try {
+          pull = await publicClient.readContract({
+            address: deployment.clawMachine,
+            abi: clawMachineAbi,
+            functionName: "getPull",
+            args: [nextPullId],
+          });
+          pollFailures = 0;
+        } catch (pollError) {
+          pollFailures += 1;
+          if (pollFailures > 20) throw pollError;
+          await sleep(POLL_INTERVAL_MS);
+          continue;
+        }
 
         if (pull.status === PullStatus.Resolved) {
           resolved = true;
@@ -237,7 +248,10 @@ export function usePull(): PullState {
         }
 
         const elapsed = Date.now() - startedAt;
-        if (elapsed >= SLOW_AFTER_MS) setSlow(true);
+        if (elapsed >= SLOW_AFTER_MS && !markedSlow) {
+          markedSlow = true;
+          setSlow(true);
+        }
         if (elapsed >= GIVE_UP_AFTER_MS) {
           throw new Error(
             "The entropy callback is taking longer than usual. Track the pull on the explorer or try again."

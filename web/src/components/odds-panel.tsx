@@ -28,10 +28,10 @@ export function OddsPanel({ machine, demo = false }: OddsPanelProps) {
 
   return (
     <Card className="w-full" font="normal">
-      <CardHeader className="pb-2">
+      <CardHeader font="normal" className="pb-2">
         <CardTitle className="retro text-[10px]">ODDS &amp; VALUE</CardTitle>
       </CardHeader>
-      <CardContent className="flex flex-col gap-3 text-xs">
+      <CardContent font="normal" className="flex flex-col gap-3 text-xs">
         <Row
           label="Legendary"
           hint={`${legendaryChance}% · ${formatUsd6(legendaryValue)}`}

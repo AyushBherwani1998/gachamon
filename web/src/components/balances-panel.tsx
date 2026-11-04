@@ -4,7 +4,7 @@ import { useAccount } from "wagmi";
 
 import { FaucetButton } from "@/components/faucet-button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/8bit/card";
-import { IS_DEMO_MODE } from "@/config/deployments";
+import { deployment, IS_DEMO_MODE } from "@/config/deployments";
 import { useBalances } from "@/hooks/use-balances";
 import { formatMon, formatToken, formatUsd6 } from "@/lib/format";
 
@@ -14,11 +14,15 @@ export function BalancesPanel() {
 
   return (
     <Card className="w-full" font="normal">
-      <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+      <CardHeader font="normal" className="pb-2">
         <CardTitle className="retro text-[10px]">YOUR WALLET</CardTitle>
-        <FaucetButton />
       </CardHeader>
-      <CardContent>
+      <CardContent font="normal">
+        {deployment.key === "testnet" && !IS_DEMO_MODE ? (
+          <div className="mb-3 flex justify-end">
+            <FaucetButton />
+          </div>
+        ) : null}
         {!isConnected && !IS_DEMO_MODE ? (
           <p className="py-4 text-center text-[11px] text-muted-foreground">
             Connect a wallet to see balances.

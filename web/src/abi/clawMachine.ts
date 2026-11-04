@@ -1,9 +1,9 @@
 /**
  * Canonical ClawMachine interface.
  *
- * NOTE: keep in sync with `contracts/abi/ClawMachine.json` once the contracts
- * worker publishes it. This file is hand-written from the shared interface and
- * is the single source of truth for the web app until then.
+ * Verified against `contracts/abi/ClawMachine.json` (contracts commit fd645cb).
+ * Only the functions/events the web app uses are included; if the contract
+ * interface changes, re-check this subset against the published JSON.
  */
 export const clawMachineAbi = [
   // ------------------------------------------------------------------ views

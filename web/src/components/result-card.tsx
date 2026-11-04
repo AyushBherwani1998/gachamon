@@ -27,7 +27,7 @@ export function ResultCard({ result }: ResultCardProps) {
           : "border-primary/60"
       )}
     >
-      <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+      <CardHeader font="normal" className="flex flex-row items-center justify-between gap-2 pb-2">
         <CardTitle className="retro text-[10px]">
           {result.legendary ? "LEGENDARY PULL" : "COMMON PULL"}
         </CardTitle>
@@ -42,7 +42,7 @@ export function ResultCard({ result }: ResultCardProps) {
           PULL #{result.pullId.toString()}
         </Badge>
       </CardHeader>
-      <CardContent className="flex flex-col gap-3">
+      <CardContent font="normal" className="flex flex-col gap-3">
         <div className="flex flex-wrap items-end justify-between gap-2">
           <div>
             <p className="retro text-[8px] text-muted-foreground">YOU WON</p>

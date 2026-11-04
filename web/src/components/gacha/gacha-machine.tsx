@@ -1,10 +1,11 @@
 "use client";
 
-import type { PullPhase } from "@/lib/types";
+import type { PullPhase, PullResult } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 interface GachaMachineProps {
   phase: PullPhase;
+  result?: PullResult | null;
   legendary?: boolean;
   label: string;
 }
@@ -13,7 +14,8 @@ interface GachaMachineProps {
  * Placeholder pixel claw machine. The visual-polish PR replaces the internals;
  * keep the props/contract stable so the page keeps working.
  */
-export function GachaMachine({ phase, legendary = false, label }: GachaMachineProps) {
+export function GachaMachine({ phase, result, legendary, label }: GachaMachineProps) {
+  const isLegendary = legendary ?? result?.legendary ?? false;
   const drawing = phase === "drawing" || phase === "confirming" || phase === "approving";
 
   return (
@@ -21,7 +23,8 @@ export function GachaMachine({ phase, legendary = false, label }: GachaMachinePr
       <div
         className={cn(
           "relative border-y-8 border-x-4 border-foreground/80 bg-[#1d1d2b] p-3 pixel-shadow",
-          drawing && "machine-drawing"
+          drawing && "machine-drawing",
+          isLegendary && "border-[#ff5fa2]"
         )}
         aria-hidden="true"
       >
@@ -62,7 +65,7 @@ export function GachaMachine({ phase, legendary = false, label }: GachaMachinePr
 
         <div className="mt-3 flex items-center justify-between border-t-4 border-foreground/30 pt-2">
           <span className="retro text-[7px] text-muted-foreground">
-            {legendary ? "LEGENDARY" : "COMMON"} ODDS
+            PRIZE ODDS
           </span>
           <span className="amount text-[10px] text-muted-foreground">98 / 2</span>
         </div>

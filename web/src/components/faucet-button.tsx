@@ -15,12 +15,12 @@ export function FaucetButton() {
 
   return (
     <div className="flex flex-col items-end gap-1">
-      <div className="flex flex-wrap items-center justify-end gap-2">
+      <div className="flex flex-wrap items-center justify-end gap-3">
         <a
           href={TESTNET_FAUCET_URL}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-[10px] underline decoration-dotted underline-offset-4 hover:text-foreground"
+          className="inline-flex min-h-11 items-center text-[10px] underline decoration-dotted underline-offset-4 hover:text-foreground"
         >
           Need MON?
         </a>
