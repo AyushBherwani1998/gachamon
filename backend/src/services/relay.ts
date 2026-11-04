@@ -163,16 +163,22 @@ export async function validateAndRelayTransaction(signedTx: string): Promise<Rel
       };
     }
 
-    const [requested] = parseEventLogs({
-      abi: ClawMachineABI,
-      eventName: 'PullRequested',
-      logs: receipt.logs,
-    });
+    let pullId: string | undefined;
+    try {
+      const [requested] = parseEventLogs({
+        abi: ClawMachineABI,
+        eventName: 'PullRequested',
+        logs: receipt.logs,
+      });
+      pullId = requested?.args.pullId.toString();
+    } catch (error) {
+      console.warn('Could not decode PullRequested from relay receipt:', error);
+    }
 
     return {
       txHash: broadcastHash,
       status: 'success',
-      pullId: requested?.args.pullId.toString(),
+      pullId,
     };
   } catch (error: any) {
     if (error.message?.includes('nonce too low')) {

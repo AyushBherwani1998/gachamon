@@ -400,8 +400,9 @@ If the RPC still rejects a range, lower `INDEXER_BLOCK_RANGE` (for example to
 - `eth_getLogs` ranges are limited; see the indexer section above.
 - Blocks are fast (~0.4s), so the default 3s poll is responsive enough for
   REST and WebSocket consumers.
-- The backend reads state through contract views (`getPull`, `getRecentPulls`,
-  `getPullPayout`) rather than log scans wherever possible.
+- The web app should read state through contract views (`getPull`,
+  `getRecentPulls`, `getPullPayout`) rather than log scans. This backend exposes
+  the same indexed data over REST for history and leaderboards.
 
 ## Project structure
 
