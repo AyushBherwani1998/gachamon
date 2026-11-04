@@ -69,8 +69,8 @@ export function ResultCard({ result }: ResultCardProps) {
 
         <p className="text-[10px] leading-relaxed text-muted-foreground">
           {result.legendary
-            ? "Top 2% pull. Tokens are already in your wallet."
-            : "Tokens are already in your wallet — no claim needed."}
+            ? "Top 2% pull. Tokens are delivered automatically; blocked transfers show under Claimable balance."
+            : "Delivered automatically — no claim step. Blocked transfers show under Claimable balance."}
         </p>
 
         {txHash ? <TxLink hash={txHash} /> : <p className="text-[10px] text-muted-foreground">Simulated demo pull</p>}

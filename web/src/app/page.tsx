@@ -7,6 +7,7 @@ import { BalancesPanel } from "@/components/balances-panel";
 import { GachaMachine } from "@/components/gacha/gacha-machine";
 import { NetworkBanner } from "@/components/network-banner";
 import { OddsPanel } from "@/components/odds-panel";
+import { OwedPanel } from "@/components/owed-panel";
 import { PullButton } from "@/components/pull-button";
 import { RecentPulls } from "@/components/recent-pulls";
 import { ResultCard, TxLink } from "@/components/result-card";
@@ -253,6 +254,7 @@ export default function Home() {
           <aside className="flex flex-col gap-5">
             <OddsPanel machine={machine} demo={demo} />
             <BalancesPanel />
+            <OwedPanel />
             <RecentPulls pulls={machine.recentPulls} player={address} />
           </aside>
         </main>

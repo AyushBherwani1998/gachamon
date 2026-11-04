@@ -95,7 +95,9 @@ USDC) and a link to the Monad MON faucet.
    polls `getPull(id)` every 500 ms. After 60 s it shows the explorer link and
    keeps polling (up to 5 minutes).
 4. On `Resolved`, it loads `getPullPayout(id)` and renders the stock symbols,
-   amounts and USD value. Tokens are already in the wallet.
+   amounts and USD value. Tokens are delivered in the callback; if a token
+   blocks the transfer, the contract records it in `owed(player, token)` and
+   the **Claimable balance** panel retries it with `withdrawOwed()`.
 
 State machine: `idle → approving → confirming → drawing → revealed | error`.
 The primary button reflects each phase ("Approve USDC", "Confirm in wallet…",
