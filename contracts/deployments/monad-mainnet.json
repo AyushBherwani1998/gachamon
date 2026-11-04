@@ -1,0 +1,38 @@
+{
+  "address": "0xbC4e651C6326Ecb440b8bF54033f2ed4323C9c72",
+  "chainId": 143,
+  "clawMachine": "0xbC4e651C6326Ecb440b8bF54033f2ed4323C9c72",
+  "deployBlock": 119302824,
+  "entropy": "0xD458261E832415CFd3BAE5E416FdF3230ce6F134",
+  "params": {
+    "callbackGasLimit": 1500000,
+    "commonPayoutBps": 7300,
+    "legendaryMultiplier": 10,
+    "legendaryRarityBps": 200,
+    "maxPriceAge": 3900,
+    "pullPrice": 1000000
+  },
+  "priceFeeds": [
+    "0xE42022cCe1913626AE4297B99291d3Ba24Cc9281",
+    "0x03ffa4673c060339E6a8E5Ba1a12B3301c966bf0",
+    "0x2e2dA5717eDE960F8b77Af4cFcBDC4Ca3099006D",
+    "0x7CA45B17D8D43059a222dEC5d991B613F61c02d9",
+    "0x7577154038de77668d0188baF47707EDcd86d0b3"
+  ],
+  "provider": "0x52DeaA1c84233F7bb8C8A45baeDE41091c616506",
+  "tokenAddresses": [
+    "0x8aD3c73F833d3F9A523aB01476625F269aEB7Cf0",
+    "0xc845b2894dBddd03858fd2D643B4eF725fE0849d",
+    "0x90A2a4c76b5D8c0bc892A69EA28Aa775a8f2dD48",
+    "0xa753A7395cAe905Cd615Da0B82A53E0560f250af",
+    "0x68fa48B1C2FE52b3D776E1953e0E782b5044Ce28"
+  ],
+  "tokens": [
+    "TSLAx",
+    "NVDAx",
+    "SPYx",
+    "QQQx",
+    "SPCXx"
+  ],
+  "usdc": "0x754704Bc059F8C67012fEd69BC8A327a5aafb603"
+}
