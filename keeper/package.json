@@ -1,0 +1,22 @@
+{
+  "name": "claw-machine-keeper",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Keeps ClawMachine xStock prices fresh on Monad",
+  "scripts": {
+    "start": "bun run src/index.ts",
+    "once": "bun run src/index.ts --once",
+    "dry": "bun run src/index.ts --dry-run --once",
+    "dry:watch": "bun run src/index.ts --dry-run",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "viem": "^2.40.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.9.0"
+  }
+}
