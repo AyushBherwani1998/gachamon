@@ -68,7 +68,7 @@ contract ClawMachine is IEntropyConsumer, Ownable, ReentrancyGuard {
     address[] private _stocks;
     mapping(address => bool) public isStock;
     mapping(address => uint256) private _prices; // stock => USD per whole token, 6 decimals
-    uint64 public pricesUpdatedAt;
+    mapping(address => uint64) public priceUpdatedAt;
 
     // ---------------------------------------------------------------------
     // Pull state
@@ -336,7 +336,7 @@ contract ClawMachine is IEntropyConsumer, Ownable, ReentrancyGuard {
         uint256 remainingUsd6
     ) private returns (uint256 amount, uint256 paid) {
         uint256 price = _prices[stock];
-        if (price == 0) return (0, 0);
+        if (price == 0 || !_isPriceFresh(stock)) return (0, 0);
 
         uint256 balance = _freeBalance(stock);
         if (balance == 0) return (0, 0);
@@ -391,6 +391,11 @@ contract ClawMachine is IEntropyConsumer, Ownable, ReentrancyGuard {
         totalOwed[token] = current > amount ? current - amount : 0;
     }
 
+    function _isPriceFresh(address stock) private view returns (bool) {
+        uint64 updatedAt = priceUpdatedAt[stock];
+        return updatedAt != 0 && block.timestamp - uint256(updatedAt) <= maxPriceAge;
+    }
+
     function _pushRecentPull(uint256 pullId) private {
         _recentPulls[_recentCursor] = pullId;
         _recentCursor = (_recentCursor + 1) % RECENT_PULLS_SIZE;
@@ -412,12 +417,14 @@ contract ClawMachine is IEntropyConsumer, Ownable, ReentrancyGuard {
     function canPull() public view returns (bool) {
         if (paused) return false;
         if (_stocks.length == 0) return false;
-        if (pricesUpdatedAt == 0) return false;
-        if (block.timestamp - uint256(pricesUpdatedAt) > maxPriceAge) return false;
 
         uint256 stockCount = _stocks.length;
         for (uint256 i = 0; i < stockCount; ++i) {
-            if (_prices[_stocks[i]] == 0) return false;
+            address stock = _stocks[i];
+            // Stocks with no balance cannot contribute to a payout, so their price is irrelevant.
+            if (_safeBalanceOf(stock) == 0) continue;
+            if (_prices[stock] == 0) return false;
+            if (!_isPriceFresh(stock)) return false;
         }
 
         return inventoryValueUsd6() >= reservedValueUsd6 + legendaryValue;
@@ -441,10 +448,16 @@ contract ClawMachine is IEntropyConsumer, Ownable, ReentrancyGuard {
     function getPrices() external view returns (uint256[] memory pricesUsd6, uint256 updatedAt) {
         uint256 stockCount = _stocks.length;
         pricesUsd6 = new uint256[](stockCount);
+        uint256 oldest = type(uint256).max;
+
         for (uint256 i = 0; i < stockCount; ++i) {
-            pricesUsd6[i] = _prices[_stocks[i]];
+            address stock = _stocks[i];
+            pricesUsd6[i] = _prices[stock];
+            uint256 stockUpdatedAt = priceUpdatedAt[stock];
+            if (stockUpdatedAt < oldest) oldest = stockUpdatedAt;
         }
-        updatedAt = uint256(pricesUpdatedAt);
+
+        updatedAt = oldest == type(uint256).max ? 0 : oldest;
     }
 
     function getPull(uint256 pullId) external view returns (Pull memory) {
@@ -480,12 +493,13 @@ contract ClawMachine is IEntropyConsumer, Ownable, ReentrancyGuard {
         require(stocks.length == pricesUsd6.length, "length mismatch");
         require(stocks.length > 0, "empty");
 
+        uint64 updatedAt = uint64(block.timestamp);
         for (uint256 i = 0; i < stocks.length; ++i) {
             require(isStock[stocks[i]], "unknown stock");
             _prices[stocks[i]] = pricesUsd6[i];
+            priceUpdatedAt[stocks[i]] = updatedAt;
         }
 
-        pricesUpdatedAt = uint64(block.timestamp);
         emit PricesUpdated(stocks, pricesUsd6, block.timestamp);
     }
 

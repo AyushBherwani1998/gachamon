@@ -277,6 +277,82 @@ contract ClawMachineTest is Test {
         assertTrue(machine.canPull(), "repriced");
     }
 
+    function testPartialPriceUpdateDoesNotHideStaleStocks() public {
+        vm.warp(1_000_000);
+        _seedPrices();
+        uint256 seededAt = 1_000_000;
+
+        vm.warp(1_000_000 + machine.maxPriceAge() + 1);
+
+        // Refresh three of the four stocks. The fourth still has inventory and a stale price.
+        address[] memory subset = new address[](3);
+        uint256[] memory prices = new uint256[](3);
+        for (uint256 i = 0; i < 3; ++i) {
+            subset[i] = stockTokens[i];
+            prices[i] = stockPrices[i];
+        }
+        machine.setPrices(subset, prices);
+
+        assertFalse(machine.canPull(), "stale un-updated stock blocks pulls");
+
+        (, uint256 oldest) = machine.getPrices();
+        assertEq(oldest, seededAt, "getPrices returns oldest timestamp");
+
+        _seedPrices();
+        assertTrue(machine.canPull(), "all stocks refreshed");
+    }
+
+    function testGetPricesReturnsOldestPerStockTimestamp() public {
+        vm.warp(1_000_000);
+        _seedPrices();
+        uint256 seededAt = 1_000_000;
+
+        vm.warp(1_000_100);
+
+        address[] memory one = new address[](1);
+        uint256[] memory prices = new uint256[](1);
+        one[0] = address(tsla);
+        prices[0] = TSLA_PRICE;
+        machine.setPrices(one, prices);
+
+        (, uint256 oldest) = machine.getPrices();
+        assertEq(oldest, seededAt, "oldest price wins");
+
+        assertEq(machine.priceUpdatedAt(address(tsla)), block.timestamp, "refreshed stock");
+        assertEq(machine.priceUpdatedAt(address(spy)), seededAt, "untouched stock");
+    }
+
+    function testCallbackSkipsStockWithStalePrice() public {
+        uint256 firstIndex = _startIndex(COMMON_RANDOM);
+        MockStock staleStock = MockStock(stockTokens[firstIndex]);
+
+        uint256 pullId = _pull(PLAYER, machine.getFee());
+        uint64 sequenceNumber = machine.getPull(pullId).sequenceNumber;
+
+        vm.warp(block.timestamp + machine.maxPriceAge() + 1);
+
+        // Refresh every stock except the one the round-robin walk starts from.
+        address[] memory subset = new address[](3);
+        uint256[] memory prices = new uint256[](3);
+        uint256 cursor = 0;
+        for (uint256 i = 0; i < stockTokens.length; ++i) {
+            if (i == firstIndex) continue;
+            subset[cursor] = stockTokens[i];
+            prices[cursor] = stockPrices[i];
+            ++cursor;
+        }
+        machine.setPrices(subset, prices);
+
+        entropy.fulfill(sequenceNumber, COMMON_RANDOM);
+
+        (address[] memory payoutStocks, uint256[] memory amounts) = machine.getPullPayout(pullId);
+        assertGt(payoutStocks.length, 0, "fresh stocks paid");
+        for (uint256 i = 0; i < payoutStocks.length; ++i) {
+            assertTrue(payoutStocks[i] != address(staleStock), "stale stock skipped");
+        }
+        assertApproxEqAbs(_usdValue(payoutStocks, amounts), 730_000, 8, "value covered");
+    }
+
     function testPullRevertsWhenPaused() public {
         machine.pause();
         assertFalse(machine.canPull(), "paused");
