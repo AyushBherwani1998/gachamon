@@ -7,8 +7,18 @@ function mapRevert(reason: string): string | null {
   if (/insufficient fee/i.test(reason)) {
     return "The MON fee was too low for this price update. Refresh and try again.";
   }
-  if (/stale|too old|price is not updated|no price feed/i.test(reason)) {
+  if (
+    /older than allowed age|price is older|stale|too old|price is not updated|no price feed|price feed does not exist/i.test(
+      reason
+    )
+  ) {
     return "The Pyth price update is stale. Refresh and try again.";
+  }
+  if (/invalid update data|invalid price update|malformed/i.test(reason)) {
+    return "The Pyth price update was rejected. Refresh and try again.";
+  }
+  if (/invalid price/i.test(reason)) {
+    return "Pyth returned an invalid price. Refresh and try again.";
   }
   if (/paused|enforcedpause/i.test(reason)) {
     return "The machine is paused. Try again later.";
