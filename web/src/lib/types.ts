@@ -42,11 +42,7 @@ export interface MachineSnapshot {
   totalPulls?: bigint;
   inventoryValueUsd6?: bigint;
   reservedValueUsd6?: bigint;
-<<<<<<< HEAD
-  /** Entropy fee in MON from `getEntropyFee()`. */
-=======
   /** Entropy fee in MON from `getFee()`. This is the whole msg.value. */
->>>>>>> origin/main
   entropyFee?: bigint;
   /** Latest Chainlink update time across the supported tokens, unix seconds. */
   pricesUpdatedAt?: bigint;
