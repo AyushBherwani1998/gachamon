@@ -109,12 +109,12 @@ adds.
 1. `usePull()` calls the server route `GET /api/price-update?chainId=143|10143`.
    The route reads the machine's feed ids and asks Hermes for a signed update
    with the server-only `PYTH_API_KEY`. The browser never sees the key.
-2. It reads `getTotalFee(updateData)` right before sending. If the wallet's
-   USDC allowance is below `pullPrice`, it approves the exact `pullPrice`. A
-   slow approval can outlive the signed update, so the update is fetched again
-   after approval before the pull is sent.
-3. It simulates `pull(random32, updateData)` (`random32` from
-   `crypto.getRandomValues`) and sends it with `value = getTotalFee(...)`.
+2. It reads `pullPrice` and the wallet's USDC allowance. If the allowance is
+   short it approves the exact `pullPrice`. A slow approval can outlive the
+   signed update, so the update is fetched again after approval.
+3. It reads `getTotalFee(updateData)` right before sending, simulates
+   `pull(random32, updateData)` (`random32` from `crypto.getRandomValues`) and
+   sends it with `value = getTotalFee(...)`.
 4. `pullId` and the Entropy `sequenceNumber` are decoded from the
    `PullRequested` log in the receipt. The UI shows the drawing state.
 5. It polls `PullResolved` for that indexed `pullId` with `getLogs` from the

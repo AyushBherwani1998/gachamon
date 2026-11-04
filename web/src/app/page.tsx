@@ -27,7 +27,7 @@ import { useFeed } from "@/hooks/use-feed";
 import { useMachine } from "@/hooks/use-machine";
 import { usePull } from "@/hooks/use-pull";
 import { formatMon, formatUsd6 } from "@/lib/format";
-import { toGachaResult, toPanelPayouts, usdPlain } from "@/lib/pull-view";
+import { resultValueUsd6, toGachaResult, toPanelPayouts, usdPlain } from "@/lib/pull-view";
 import type { PullPhase } from "@/lib/types";
 
 const BUSY_PHASES: PullPhase[] = ["preparing", "approving", "confirming", "drawing"];
@@ -89,6 +89,7 @@ export default function Home() {
   const panelPayouts = pull.result
     ? toPanelPayouts(pull.result.stocks, machine, pull.result.valueUsd6)
     : [];
+  const resultValue = pull.result ? resultValueUsd6(pull.result, machine) : undefined;
 
   const label = useMemo(() => {
     if (demo) {
@@ -185,11 +186,11 @@ export default function Home() {
         return "Pull resolved. No stock payout was recorded.";
       }
       const symbols = pull.result.stocks.map((stock) => stock.symbol).join(", ");
-      return `${pull.result.legendary ? "Legendary" : "Common"} pull! You received ${symbols} worth ${formatUsd6(pull.result.valueUsd6)}.`;
+      return `${pull.result.legendary ? "Legendary" : "Common"} pull! You received ${symbols} worth ${formatUsd6(resultValue ?? 0n)}.`;
     }
     if (pull.phase === "error" && pull.error) return `Pull failed: ${pull.error}`;
     return "";
-  }, [pull.phase, pull.result, pull.error, pull.slow]);
+  }, [pull.phase, pull.result, pull.error, pull.slow, resultValue]);
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -251,7 +252,7 @@ export default function Home() {
                     <ResultCard
                       legendary={pull.result.legendary}
                       payouts={panelPayouts}
-                      valueUsd={formatUsd6(pull.result.valueUsd6)}
+                      valueUsd={formatUsd6(resultValue ?? 0n)}
                       explorerUrl={
                         pull.txHash
                           ? explorerTx(deployment.key, pull.txHash)
