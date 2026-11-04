@@ -38,6 +38,8 @@ export interface MachineSnapshot {
   stocks: StockMeta[];
   prices: bigint[];
   recentPulls: RecentPull[];
+  /** Last read error, surfaced to the live feed. */
+  error: string | null;
   refetch: () => void;
 }
 
@@ -65,8 +67,15 @@ export interface PullState {
   txHash: Hex | null;
   /** True once the 60 s reveal wait has passed; polling continues. */
   slow: boolean;
+  /** True once the on-chain refund timeout has elapsed for a pending pull. */
+  refundable: boolean;
+  refunded: boolean;
+  refundTxHash: Hex | null;
+  refundError: string | null;
+  isRefunding: boolean;
   start: () => Promise<void>;
   reset: () => void;
+  refund: () => Promise<void>;
 }
 
 export interface BalanceSnapshot {

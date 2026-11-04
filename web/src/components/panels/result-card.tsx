@@ -39,12 +39,14 @@ export function ResultCard({
   payouts,
   valueUsd,
   explorerUrl,
+  shareUrl,
   onPullAgain,
 }: {
   legendary: boolean;
   payouts: PanelPayout[];
   valueUsd: string;
   explorerUrl?: string;
+  shareUrl?: string;
   onPullAgain?: () => void;
 }) {
   const accent = legendary ? ACCENTS.legendary : ACCENTS.common;
@@ -159,7 +161,7 @@ export function ResultCard({
             >
               Pull again
             </Button>
-            <ShareButton text={buildShareText(payouts)} url="" />
+            <ShareButton text={buildShareText(payouts)} url={shareUrl ?? ""} />
           </div>
 
           {explorerUrl ? (

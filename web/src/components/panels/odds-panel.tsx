@@ -47,6 +47,7 @@ export function OddsPanel({
   inventoryUsd,
   totalPulls,
   loading = false,
+  statusLabel,
 }: {
   legendaryBps: number;
   commonUsd: string;
@@ -55,6 +56,7 @@ export function OddsPanel({
   inventoryUsd?: string;
   totalPulls?: string;
   loading?: boolean;
+  statusLabel?: string;
 }) {
   const legendaryPct = Math.min(Math.max(legendaryBps, 0), 10_000) / 100;
   const commonPct = 100 - legendaryPct;
@@ -87,7 +89,7 @@ export function OddsPanel({
           title="Odds & EV"
           tag={
             <PanelTag tone={loading ? "muted" : "gold"}>
-              {loading ? "Syncing" : "On-chain"}
+              {loading ? "Syncing" : statusLabel ?? "On-chain"}
             </PanelTag>
           }
         />

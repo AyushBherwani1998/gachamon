@@ -13,7 +13,7 @@ import { shortAddress } from "@/lib/format";
 
 const POLL_INTERVAL_MS = 500;
 const SLOW_AFTER_MS = 60_000;
-const GIVE_UP_AFTER_MS = 5 * 60_000;
+const DEFAULT_REFUND_TIMEOUT = 10n * 60n; // contract STUCK_PULL_TIMEOUT fallback
 
 function friendlyError(error: unknown): string {
   if (error instanceof BaseError) {
@@ -73,9 +73,25 @@ function useMockPull(): PullState {
     error: null,
     txHash: null,
     slow,
+    refundable: false,
+    refunded: false,
+    refundTxHash: null,
+    refundError: null,
+    isRefunding: false,
     start,
     reset,
+    refund: async () => {},
   };
+}
+
+interface PullStruct {
+  player: Address;
+  sequenceNumber: bigint;
+  status: number;
+  legendary: boolean;
+  requestedAt: bigint;
+  resolvedAt: bigint;
+  valueUsd6: bigint;
 }
 
 export function usePull(): PullState {
@@ -89,7 +105,13 @@ export function usePull(): PullState {
   const [error, setError] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<Hex | null>(null);
   const [slow, setSlow] = useState(false);
+  const [refundable, setRefundable] = useState(false);
+  const [refunded, setRefunded] = useState(false);
+  const [refundTxHash, setRefundTxHash] = useState<Hex | null>(null);
+  const [refundError, setRefundError] = useState<string | null>(null);
+  const [isRefunding, setIsRefunding] = useState(false);
   const runId = useRef(0);
+  const refundTimeout = useRef<bigint>(DEFAULT_REFUND_TIMEOUT);
 
   useEffect(
     () => () => {
@@ -127,18 +149,18 @@ export function usePull(): PullState {
     setPullId(null);
     setTxHash(null);
     setSlow(false);
+    setRefundable(false);
+    setRefunded(false);
+    setRefundTxHash(null);
+    setRefundError(null);
+    setIsRefunding(false);
 
     try {
-      const [pullPrice, fee, allowance] = await Promise.all([
+      const [pullPrice, allowance, timeout] = await Promise.all([
         publicClient.readContract({
           address: deployment.clawMachine,
           abi: clawMachineAbi,
           functionName: "pullPrice",
-        }),
-        publicClient.readContract({
-          address: deployment.clawMachine,
-          abi: clawMachineAbi,
-          functionName: "getFee",
         }),
         publicClient.readContract({
           address: deployment.usdc,
@@ -146,7 +168,13 @@ export function usePull(): PullState {
           functionName: "allowance",
           args: [address, deployment.clawMachine],
         }),
+        publicClient.readContract({
+          address: deployment.clawMachine,
+          abi: clawMachineAbi,
+          functionName: "STUCK_PULL_TIMEOUT",
+        }),
       ]);
+      refundTimeout.current = timeout;
 
       if (allowance < pullPrice) {
         setPhase("approving");
@@ -163,6 +191,15 @@ export function usePull(): PullState {
 
       if (runId.current !== currentRun) return;
       setPhase("confirming");
+
+      // Read the entropy fee immediately before sending the pull. Approval
+      // waits can be minutes long and the fee is not cached across them.
+      const fee = await publicClient.readContract({
+        address: deployment.clawMachine,
+        abi: clawMachineAbi,
+        functionName: "getFee",
+      });
+
       const hash = await writeContractAsync({
         address: deployment.clawMachine,
         abi: clawMachineAbi,
@@ -199,7 +236,7 @@ export function usePull(): PullState {
       let markedSlow = false;
       let pollFailures = 0;
       while (runId.current === currentRun) {
-        let pull;
+        let pull: PullStruct;
         try {
           pull = await publicClient.readContract({
             address: deployment.clawMachine,
@@ -217,6 +254,16 @@ export function usePull(): PullState {
 
         if (pull.status === PullStatus.Resolved) {
           resolved = true;
+          setRefundable(false);
+
+          // A zero-value resolved pull is a refund, not a prize.
+          if (pull.valueUsd6 === 0n && !pull.legendary) {
+            if (runId.current !== currentRun) return;
+            setRefunded(true);
+            setPhase("revealed");
+            break;
+          }
+
           const [payoutStocks, amounts] = await publicClient.readContract({
             address: deployment.clawMachine,
             abi: clawMachineAbi,
@@ -252,15 +299,18 @@ export function usePull(): PullState {
           break;
         }
 
+        const nowSeconds = BigInt(Math.floor(Date.now() / 1_000));
+        if (
+          pull.requestedAt > 0n &&
+          nowSeconds > pull.requestedAt + refundTimeout.current
+        ) {
+          setRefundable(true);
+        }
+
         const elapsed = Date.now() - startedAt;
         if (elapsed >= SLOW_AFTER_MS && !markedSlow) {
           markedSlow = true;
           setSlow(true);
-        }
-        if (elapsed >= GIVE_UP_AFTER_MS) {
-          throw new Error(
-            "The entropy callback is taking longer than usual. Track the pull on the explorer or try again."
-          );
         }
         await sleep(POLL_INTERVAL_MS);
       }
@@ -275,6 +325,39 @@ export function usePull(): PullState {
     }
   }, [address, chainId, publicClient, writeContractAsync]);
 
+  const refund = useCallback(async () => {
+    if (pullId === null || !publicClient || !address) return;
+    if (chainId !== deployment.chainId) {
+      setRefundError(`Switch your wallet to ${deployment.name} first.`);
+      return;
+    }
+
+    setIsRefunding(true);
+    setRefundError(null);
+    try {
+      const hash = await writeContractAsync({
+        address: deployment.clawMachine,
+        abi: clawMachineAbi,
+        functionName: "refundStuckPull",
+        args: [pullId],
+        chainId: deployment.chainId,
+      });
+      setRefundTxHash(hash);
+      const receipt = await publicClient.waitForTransactionReceipt({ hash });
+      if (receipt.status !== "success") throw new Error("The refund transaction reverted.");
+
+      runId.current += 1;
+      setRefunded(true);
+      setRefundable(false);
+      setResult(null);
+      setPhase("revealed");
+    } catch (err) {
+      setRefundError(friendlyError(err));
+    } finally {
+      setIsRefunding(false);
+    }
+  }, [pullId, publicClient, address, chainId, writeContractAsync]);
+
   const reset = useCallback(() => {
     runId.current += 1;
     setPhase("idle");
@@ -283,6 +366,11 @@ export function usePull(): PullState {
     setError(null);
     setTxHash(null);
     setSlow(false);
+    setRefundable(false);
+    setRefunded(false);
+    setRefundTxHash(null);
+    setRefundError(null);
+    setIsRefunding(false);
   }, []);
 
   const mock = useMockPull();
@@ -296,7 +384,13 @@ export function usePull(): PullState {
     error,
     txHash,
     slow,
+    refundable,
+    refunded,
+    refundTxHash,
+    refundError,
+    isRefunding,
     start,
     reset,
+    refund,
   };
 }

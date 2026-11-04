@@ -1,6 +1,6 @@
 "use client";
 
-import { TxLink } from "@/components/result-card";
+import { TxLink } from "@/components/tx-link";
 import { Button } from "@/components/ui/8bit/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/8bit/card";
 import { useOwed } from "@/hooks/use-owed";

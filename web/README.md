@@ -36,6 +36,7 @@ bun run typecheck
 | --- | --- |
 | `NEXT_PUBLIC_DEFAULT_NETWORK` | `testnet` (default) or `mainnet` |
 | `NEXT_PUBLIC_PRIVY_APP_ID` | Privy app id. Blank = injected/MetaMask fallback |
+| `NEXT_PUBLIC_SITE_URL` | Public app URL used by the QR card and share link (default `http://localhost:3000`) |
 | `NEXT_PUBLIC_CLAW_MACHINE_MAINNET` | ClawMachine address on Monad mainnet (143) |
 | `NEXT_PUBLIC_CLAW_MACHINE_TESTNET` | ClawMachine address on Monad testnet (10143) |
 | `NEXT_PUBLIC_USDC_TESTNET` | Testnet MockUSDC address |
@@ -60,16 +61,15 @@ Testnet needs both `NEXT_PUBLIC_CLAW_MACHINE_TESTNET` and
 `NEXT_PUBLIC_USDC_TESTNET`. Mainnet only needs
 `NEXT_PUBLIC_CLAW_MACHINE_MAINNET` (USDC is canonical).
 
-When the contracts worker publishes `contracts/abi/ClawMachine.json`, diff it
-against `src/abi/clawMachine.ts` and update the subset used by the app:
+`src/abi/ClawMachine.json` is a direct copy of
+`contracts/abi/ClawMachine.json`; `src/abi/clawMachine.ts` contains the same ABI
+as a typed `as const` export (plus the `PullStatus` enum). It includes the
+audited contract's `refundStuckPull` and `PullRefunded`, and the current
+`callbackGasLimit` default of 1.2M, so the UI reads the live entropy fee
+(~1.48 MON on mainnet) via `getFee()`.
 
-- `pull`, `getFee`, `canPull`, config getters
-- `getStocks`, `getPrices`, `getPull`, `getPullPayout`, `getRecentPulls`
-- `PullRequested` / `PullResolved` events
-
-The current ABI is checked against the published
-`contracts/abi/ClawMachine.json` and matches for every function and event the
-app reads.
+When the contracts worker regenerates the ABI, copy the JSON over and regenerate
+the TS export from it.
 
 ## Wallet sign-in (Privy)
 
@@ -92,6 +92,10 @@ Privy rejects unknown origins at runtime even when the build succeeds.
 If `NEXT_PUBLIC_PRIVY_APP_ID` is missing or is not a 25-character app id, the app
 falls back to the injected + MetaMask connectors. Mock mode also uses the
 fallback, so `NEXT_PUBLIC_DEMO_MODE=mock` never opens a login modal.
+
+Set `NEXT_PUBLIC_SITE_URL` to the public deployment URL (for example
+`https://clawmachine.vercel.app`). The QR card encodes it and the share button
+links back to it. Locally it defaults to `http://localhost:3000`.
 
 ## Mock mode
 
@@ -133,11 +137,16 @@ USDC) and a link to the Monad MON faucet.
    submits `pull()` with `value: getFee()`.
 3. The pull id is decoded from the `PullRequested` log in the receipt. The hook
    polls `getPull(id)` every 500 ms. After 60 s it shows the explorer link and
-   keeps polling (up to 5 minutes).
+   keeps polling; the entropy fee is re-read immediately before `pull()` (not
+   cached across a slow approval).
 4. On `Resolved`, it loads `getPullPayout(id)` and renders the stock symbols,
    amounts and USD value. Tokens are delivered in the callback; if a token
    blocks the transfer, the contract records it in `owed(player, token)` and
    the **Claimable balance** panel retries it with `withdrawOwed()`.
+5. If a pull is still pending after the on-chain `STUCK_PULL_TIMEOUT` (10
+   minutes), the pending card offers **Refund pull**, which calls
+   `refundStuckPull(id)` and returns the pull price. The machine polls
+   indefinitely so the refund option is reachable.
 
 State machine: `idle → approving → confirming → drawing → revealed | error`.
 The primary button reflects each phase ("Approve USDC", "Confirm in wallet…",
@@ -150,16 +159,17 @@ The primary button reflects each phase ("Approve USDC", "Confirm in wallet…",
 src/
   abi/            ClawMachine + ERC20/MockUSDC ABIs (as const)
   app/            App Router page, layout, providers, global styles
-  components/     header, machine placeholder, pull button, result, odds,
-                  balances, claimable balance, recent pulls, footer, banner
-  config/         chain definitions, deployments, wagmi config
+  components/     header, PixelGachaMachine, panels, pull button, balances,
+                  claimable balance, footer, banners
+  config/         chain definitions, deployments, wagmi/Privy config
   hooks/          useMachine, usePull, useBalances, useFaucet, useOwed
-  lib/            formatting, shared types, mock-mode simulator
+  lib/            formatting, shared types, mock-mode simulator, pull views
 ```
 
-`GachaMachine` in `src/components/gacha/` is a deliberate placeholder with a
-stable props contract (`phase`, `legendary`, `label`). The pixel-polish PR
-replaces its internals without touching the page wiring.
+`PixelGachaMachine` in `src/components/gacha/` renders every pull phase and the
+tear-to-reveal card; `onRevealed` opens the detailed panel result. `GachaResult`
+receives formatted payout amounts, USD strings and the explorer transaction URL
+from `usePull` via `src/lib/pull-view.ts`.
 
 ## Panels preview
 
@@ -202,18 +212,21 @@ testnet.
 - Framework preset: Next.js
 - Package manager: Bun (`bun install`, `bun run build`)
 - Add the environment variables from the table above in Project Settings,
-  including `NEXT_PUBLIC_PRIVY_APP_ID` and the Vercel domain as a Privy allowed
-  origin.
+  including `NEXT_PUBLIC_PRIVY_APP_ID`, `NEXT_PUBLIC_SITE_URL` and the Vercel
+  domain as a Privy allowed origin.
 
 ## Troubleshooting
 
 - **Sign-in modal fails to load** — check that the Privy app id is the full
   25-character id and that the current origin is allowed in the Privy dashboard.
 - **"Machine not deployed"** — set the ClawMachine (and testnet USDC) env vars
-  for the selected network and restart/rebuild.
+  for the selected network and restart/rebuild. The app shows an explicit
+  not-deployed notice with the required env names and a mock-mode command; it
+  never reads a zero address.
 - **"Not enough USDC"** — on testnet use **Get test USDC**; on mainnet top up
   USDC in the connected wallet.
 - **Wrong network banner** — click the switch button; the app reads state from
   the selected deployment chain even while the wallet is elsewhere.
 - **Pull stuck in "Drawing"** — entropy callbacks usually land in a few
-  seconds. After 60 s the explorer link appears; the page keeps polling.
+  seconds. After 60 s the explorer link appears; the page keeps polling, and
+  after 10 minutes the pending card offers **Refund pull**.

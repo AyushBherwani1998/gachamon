@@ -193,6 +193,7 @@ export function useMachine(): MachineSnapshot {
     stocks: stockMeta,
     prices,
     recentPulls,
+    error: reads.error instanceof Error ? reads.error.message : null,
     refetch: () => {
       void reads.refetch();
       void symbolsRead.refetch();

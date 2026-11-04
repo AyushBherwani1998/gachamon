@@ -28,9 +28,11 @@ function prettyUrl(url: string) {
 export function QrCard({
   url,
   caption = "Free play on testnet - scan to pull",
+  networkLabel = "Testnet",
 }: {
   url: string;
   caption?: string;
+  networkLabel?: string;
 }) {
   const [result, setResult] = useState<QrResult | null>(null);
 
@@ -69,7 +71,7 @@ export function QrCard({
         <PanelHeader
           eyebrow="Point a phone at the screen"
           title="Scan to play"
-          tag={<PanelTag tone="gold">Testnet</PanelTag>}
+          tag={<PanelTag tone="gold">{networkLabel}</PanelTag>}
         />
       </CardHeader>
 

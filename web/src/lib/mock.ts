@@ -75,13 +75,15 @@ function makePull(
   };
 }
 
+// Fixed near the event time so the mock feed doesn't show "390d ago".
+const MOCK_NOW = 1_793_780_300n;
 const seededRecent: RecentPull[] = [
-  makePull(136n, false, 2, 730_000n, 0, 1_760_000_060n),
-  makePull(135n, false, 3, 730_000n, 1, 1_760_000_020n),
-  makePull(134n, true, 0, 10_000_000n, 2, 1_759_999_980n),
-  makePull(133n, false, 1, 730_000n, 3, 1_759_999_940n),
-  makePull(132n, false, 0, 730_000n, 4, 1_759_999_900n),
-  makePull(131n, false, 2, 730_000n, 5, 1_759_999_860n),
+  makePull(136n, false, 2, 730_000n, 0, MOCK_NOW - 60n),
+  makePull(135n, false, 3, 730_000n, 1, MOCK_NOW - 120n),
+  makePull(134n, true, 0, 10_000_000n, 2, MOCK_NOW - 180n),
+  makePull(133n, false, 1, 730_000n, 3, MOCK_NOW - 240n),
+  makePull(132n, false, 0, 730_000n, 4, MOCK_NOW - 300n),
+  makePull(131n, false, 2, 730_000n, 5, MOCK_NOW - 360n),
 ];
 
 interface MockState {
@@ -131,6 +133,7 @@ export function getMockMachine(): MachineSnapshot {
     })),
     prices: mockStockList.map((stock) => stock.priceUsd6),
     recentPulls: state.recentPulls,
+    error: null,
     refetch: () => {},
   };
 }
