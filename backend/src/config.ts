@@ -29,12 +29,16 @@ export const config = {
   wsUrl: process.env.WS_URL || 'wss://rpc.monad.xyz',
   clawMachineAddress: (process.env.CLAW_MACHINE_ADDRESS || '0x0000000000000000000000000000000000000000') as `0x${string}`,
   
-  // Pyth feed IDs for xStocks tokens
+  // Pyth contracts on Monad
+  pythPriceFeedAddress: (process.env.PYTH_PRICE_FEED_ADDRESS || '0xACeA761c27A909d4D3895128EBe6370FDE2dF481') as `0x${string}`,
+  pythEntropyAddress: '0xD458261E832415CFd3BAE5E416FdF3230ce6F134' as `0x${string}`,
+  
+  // Pyth feed IDs for xStocks tokens (equity price feeds)
   pythFeedIds: {
-    TSLAx: process.env.PYTH_FEED_TSLA || '0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace',
-    NVDAx: process.env.PYTH_FEED_NVDA || '0x3115a1f4e7923d68205ea1e3c80271396e2ad7bb4e49df45e3e5a9c1d37b10de',
+    TSLAx: process.env.PYTH_FEED_TSLA || '0x16dad506d7db8da01c87581c87ca897a012a153557d4d578c3b9c9e1bc0632f1',
+    NVDAx: process.env.PYTH_FEED_NVDA || '0xb1073854ed24cbc755dc527418f52b7d271f6cc967bbf8d8129112b18860a593',
     AAPLx: process.env.PYTH_FEED_AAPL || '0x49f6b65cb1de6b10eaf75e7c03ca029c306d0357e91b5311b175084a5ad55688',
-    SPYx: process.env.PYTH_FEED_SPY || '0x19e09bb805456ada3979a9cd1c90a9a76d9a4401fab4d3f55f0e99dfd7c6f5f1',
+    SPYx: process.env.PYTH_FEED_SPY || '0x19e09bb805456ada3979a7d1cbb4b6d63babc3a0f8e8a9509f68afa5c4c11cd5',
   },
   
   // Token addresses on Monad

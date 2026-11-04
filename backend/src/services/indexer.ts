@@ -48,6 +48,7 @@ async function backfillEvents() {
             { name: 'pullId', type: 'uint256', indexed: true },
             { name: 'player', type: 'address', indexed: true },
             { name: 'sequenceNumber', type: 'uint64', indexed: false },
+            { name: 'pullPrice', type: 'uint256', indexed: false },
           ],
         },
         fromBlock,

@@ -1,14 +1,17 @@
 /**
- * TEMPORARY ABI FILE - TO BE REGENERATED FROM REAL CONTRACT
+ * ClawMachine ABI - Synced with contract from PR #21
  * 
- * This ABI is manually defined based on the IClawMachine interface specification
- * from plan.md. Once the actual ClawMachine.sol contract is deployed, regenerate
- * this file using the compiled ABI.
- * 
- * TODO: Replace with actual ABI after contract deployment
+ * This ABI is based on the IClawMachine interface from the actual contract.
+ * Key changes from the temporary ABI:
+ * - pull() now takes bytes[] priceUpdateData parameter
+ * - Fee functions split into getPythFee, getEntropyFee, getTotalFee
+ * - PullRequested event includes pullPrice
+ * - New TransferOwed event for failed transfers
+ * - Pyth oracle integration for on-chain price feeds
  */
 
 export const ClawMachineABI = [
+  // Events
   {
     type: 'event',
     name: 'PullRequested',
@@ -16,6 +19,7 @@ export const ClawMachineABI = [
       { name: 'pullId', type: 'uint256', indexed: true },
       { name: 'player', type: 'address', indexed: true },
       { name: 'sequenceNumber', type: 'uint64', indexed: false },
+      { name: 'pullPrice', type: 'uint256', indexed: false },
     ],
   },
   {
@@ -31,38 +35,47 @@ export const ClawMachineABI = [
   },
   {
     type: 'event',
+    name: 'TransferOwed',
+    inputs: [
+      { name: 'pullId', type: 'uint256', indexed: true },
+      { name: 'player', type: 'address', indexed: true },
+      { name: 'token', type: 'address', indexed: true },
+      { name: 'amount', type: 'uint256', indexed: false },
+    ],
+  },
+  {
+    type: 'event',
     name: 'InventoryRefilled',
     inputs: [
-      { name: 'owner', type: 'address', indexed: true },
       { name: 'stocks', type: 'address[]', indexed: false },
       { name: 'amounts', type: 'uint256[]', indexed: false },
     ],
   },
   {
     type: 'event',
-    name: 'PricesUpdated',
+    name: 'TokenAdded',
     inputs: [
-      { name: 'stocks', type: 'address[]', indexed: false },
-      { name: 'prices', type: 'uint256[]', indexed: false },
-      { name: 'timestamp', type: 'uint256', indexed: false },
+      { name: 'token', type: 'address', indexed: true },
+      { name: 'feedId', type: 'bytes32', indexed: false },
     ],
   },
   {
     type: 'event',
-    name: 'TransferOwed',
+    name: 'MaxPriceAgeUpdated',
     inputs: [
-      { name: 'pullId', type: 'uint256', indexed: true },
-      { name: 'player', type: 'address', indexed: true },
-      { name: 'stock', type: 'address', indexed: false },
-      { name: 'amount', type: 'uint256', indexed: false },
+      { name: 'oldMaxAge', type: 'uint256', indexed: false },
+      { name: 'newMaxAge', type: 'uint256', indexed: false },
     ],
   },
+
+  // Player actions
   {
     type: 'function',
     name: 'pull',
     stateMutability: 'payable',
     inputs: [
       { name: 'userRandomNumber', type: 'bytes32' },
+      { name: 'priceUpdateData', type: 'bytes[]' },
     ],
     outputs: [
       { name: 'pullId', type: 'uint256' },
@@ -70,11 +83,46 @@ export const ClawMachineABI = [
   },
   {
     type: 'function',
-    name: 'withdraw',
+    name: 'withdrawOwed',
     stateMutability: 'nonpayable',
     inputs: [],
     outputs: [],
   },
+
+  // View functions - Fees
+  {
+    type: 'function',
+    name: 'getPythFee',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'priceUpdateData', type: 'bytes[]' },
+    ],
+    outputs: [
+      { name: '', type: 'uint256' },
+    ],
+  },
+  {
+    type: 'function',
+    name: 'getEntropyFee',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [
+      { name: '', type: 'uint256' },
+    ],
+  },
+  {
+    type: 'function',
+    name: 'getTotalFee',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'priceUpdateData', type: 'bytes[]' },
+    ],
+    outputs: [
+      { name: '', type: 'uint256' },
+    ],
+  },
+
+  // View functions - Machine status
   {
     type: 'function',
     name: 'canPull',
@@ -86,20 +134,11 @@ export const ClawMachineABI = [
   },
   {
     type: 'function',
-    name: 'getFee',
-    stateMutability: 'view',
-    inputs: [],
-    outputs: [
-      { name: 'entropyFeeInMON', type: 'uint256' },
-    ],
-  },
-  {
-    type: 'function',
     name: 'getInventoryValue',
     stateMutability: 'view',
     inputs: [],
     outputs: [
-      { name: 'totalValueUSD', type: 'uint256' },
+      { name: 'totalValueUSDC', type: 'uint256' },
     ],
   },
   {
@@ -125,40 +164,69 @@ export const ClawMachineABI = [
   },
   {
     type: 'function',
-    name: 'getPull',
+    name: 'getPullBasicData',
     stateMutability: 'view',
     inputs: [
       { name: 'pullId', type: 'uint256' },
     ],
     outputs: [
-      {
-        name: '',
-        type: 'tuple',
-        components: [
-          { name: 'player', type: 'address' },
-          { name: 'entropySequence', type: 'uint64' },
-          { name: 'reservedValue', type: 'uint256' },
-          { name: 'resolved', type: 'bool' },
-        ],
-      },
+      { name: 'player', type: 'address' },
+      { name: 'entropySequence', type: 'uint64' },
+      { name: 'reservedValue', type: 'uint256' },
+      { name: 'resolved', type: 'bool' },
     ],
   },
   {
     type: 'function',
-    name: 'setPrices',
+    name: 'getPullPriceSnapshot',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'pullId', type: 'uint256' },
+      { name: 'token', type: 'address' },
+    ],
+    outputs: [
+      { name: '', type: 'uint256' },
+    ],
+  },
+
+  // Owner functions
+  {
+    type: 'function',
+    name: 'addToken',
     stateMutability: 'nonpayable',
     inputs: [
-      { name: 'stocks', type: 'address[]' },
-      { name: 'prices', type: 'uint256[]' },
+      { name: 'token', type: 'address' },
+      { name: 'pythFeedId', type: 'bytes32' },
     ],
     outputs: [],
   },
   {
     type: 'function',
-    name: 'setOracle',
+    name: 'removeToken',
     stateMutability: 'nonpayable',
     inputs: [
-      { name: 'newOracle', type: 'address' },
+      { name: 'token', type: 'address' },
+    ],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'setParameters',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: '_pullPrice', type: 'uint256' },
+      { name: '_commonBps', type: 'uint16' },
+      { name: '_legendaryRarityBps', type: 'uint16' },
+      { name: '_legendaryMultiplier', type: 'uint16' },
+    ],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'setMaxPriceAge',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'newMaxAge', type: 'uint256' },
     ],
     outputs: [],
   },
@@ -183,13 +251,20 @@ export const ClawMachineABI = [
   },
   {
     type: 'function',
-    name: 'setKeeper',
+    name: 'pause',
     stateMutability: 'nonpayable',
-    inputs: [
-      { name: 'newKeeper', type: 'address' },
-    ],
+    inputs: [],
     outputs: [],
   },
+  {
+    type: 'function',
+    name: 'unpause',
+    stateMutability: 'nonpayable',
+    inputs: [],
+    outputs: [],
+  },
+
+  // Pyth Entropy callback (internal)
   {
     type: 'function',
     name: 'entropyCallback',

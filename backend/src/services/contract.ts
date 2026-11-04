@@ -14,7 +14,7 @@ export async function getMachineStatus(): Promise<MachineStatus> {
       publicClient.readContract({
         address: config.clawMachineAddress,
         abi: ClawMachineABI,
-        functionName: 'getFee',
+        functionName: 'getEntropyFee',
       }).catch(() => 0n),
       
       publicClient.readContract({

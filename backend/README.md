@@ -4,13 +4,20 @@ Backend relay and indexer service for the xStocks Claw Machine on Monad mainnet 
 
 ## Architecture: Option A Relay
 
-The frontend builds and signs the complete `pull()` transaction (player pays gas + fees in MON), then POSTs the raw signed transaction hex to the backend. The backend validates and broadcasts it to the Monad network.
+The frontend builds and signs the complete `pull(bytes32 userRandomNumber, bytes[] priceUpdateData)` transaction (player pays gas + fees in MON), then POSTs the raw signed transaction hex to the backend. The backend validates and broadcasts it to the Monad network.
+
+**Transaction Flow:**
+1. Frontend fetches Pyth price updates from Hermes API
+2. Frontend signs transaction with `priceUpdateData` (player pays Pyth fee + Entropy fee + gas)
+3. Backend validates: chain ID, recipient, function selector, gas limit, value ≥ `getTotalFee(priceUpdateData)`
+4. Backend broadcasts transaction to Monad RPC
 
 This approach:
 - ✅ Player controls their own transaction signing
 - ✅ No private keys stored on backend
 - ✅ Backend only validates and relays
 - ✅ Backend never pays gas
+- ✅ Integrates with Pyth on-chain price feeds
 
 ## Features
 
@@ -105,9 +112,10 @@ Validate and broadcast a signed pull transaction.
 **Validation Rules:**
 - ✅ Chain ID must be 143 (Monad)
 - ✅ Recipient must be ClawMachine contract address
-- ✅ Function selector must match `pull(bytes32)`
+- ✅ Function selector must match `pull(bytes32, bytes[])`
+- ✅ Calldata must decode to valid `pull()` arguments with `priceUpdateData`
 - ✅ Gas limit must be ≤ 500,000
-- ✅ Value must be non-zero (to cover Pyth fees)
+- ✅ Value must be ≥ `getTotalFee(priceUpdateData)` (Pyth fee + Entropy fee)
 - ✅ Rate limit: 1 pull per address every 3 seconds
 - ✅ Duplicate transaction detection
 
@@ -128,7 +136,7 @@ Get current machine status.
 
 ### GET /price-update
 
-Fetch Pyth price update data.
+Fetch Pyth price update data from Hermes API, plus the total fee required for the pull transaction.
 
 **Query Parameters:**
 - `symbols` (optional): Comma-separated list of symbols (default: `TSLAx,NVDAx,AAPLx,SPYx`)
@@ -142,9 +150,15 @@ GET /price-update?symbols=TSLAx,NVDAx
 ```json
 {
   "priceUpdateData": ["0x504e41550100000003b801000000030d01..."],
-  "fee": "0.0002"
+  "fee": "150000000000000"
 }
 ```
+
+**Notes:**
+- `priceUpdateData` contains signed price proofs from Pyth oracle
+- `fee` is the total fee from `getTotalFee(priceUpdateData)` (Pyth fee + Entropy fee in wei)
+- Frontend must include this `priceUpdateData` in the `pull()` transaction
+- Frontend must send at least `fee` amount as transaction value
 
 ### GET /pulls/:id
 
@@ -268,14 +282,21 @@ const walletClient = createWalletClient({
   transport: http('https://rpc.monad.xyz'),
 });
 
+// Fetch Pyth price updates first
+const priceUpdateResponse = await fetch('http://localhost:3000/price-update');
+const { priceUpdateData, fee } = await priceUpdateResponse.json();
+
 // Sign transaction WITHOUT broadcasting
 const signedTx = await account.signTransaction({
   to: CLAW_MACHINE_ADDRESS,
-  value: parseEther('0.001'), // Pyth fee
+  value: BigInt(fee), // Total fee (Pyth + Entropy)
   data: encodeFunctionData({
     abi: ClawMachineABI,
     functionName: 'pull',
-    args: [userRandomBytes32],
+    args: [
+      userRandomBytes32,
+      priceUpdateData, // Include Pyth price update data
+    ],
   }),
   chainId: 143,
   nonce: await walletClient.getTransactionCount({ address: account.address }),
@@ -303,30 +324,36 @@ import { encodeFunctionData, parseEther } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 
 async function executePull(userAccount: ReturnType<typeof privateKeyToAccount>) {
-  // 1. Get current fees and price update data
+  // 1. Check machine status
   const machineStatus = await fetch('http://localhost:3000/machine').then(r => r.json());
-  const priceUpdate = await fetch('http://localhost:3000/price-update').then(r => r.json());
   
   if (!machineStatus.canPull) {
     throw new Error('Machine is currently refilling');
   }
   
-  // 2. Generate user randomness
+  // 2. Fetch Pyth price update data
+  const priceUpdate = await fetch('http://localhost:3000/price-update').then(r => r.json());
+  const { priceUpdateData, fee } = priceUpdate;
+  
+  // 3. Generate user randomness
   const userRandom = `0x${crypto.getRandomValues(new Uint8Array(32))
     .reduce((s, b) => s + b.toString(16).padStart(2, '0'), '')}`;
   
-  // 3. Build transaction
+  // 4. Build and sign transaction
   const nonce = await walletClient.getTransactionCount({ 
     address: userAccount.address 
   });
   
   const signedTx = await userAccount.signTransaction({
     to: CLAW_MACHINE_ADDRESS,
-    value: BigInt(machineStatus.entropyFee),
+    value: BigInt(fee), // Total fee (Pyth + Entropy)
     data: encodeFunctionData({
       abi: ClawMachineABI,
       functionName: 'pull',
-      args: [userRandom],
+      args: [
+        userRandom as `0x${string}`,
+        priceUpdateData, // Pyth price update data
+      ],
     }),
     chainId: 143,
     nonce,
@@ -335,7 +362,7 @@ async function executePull(userAccount: ReturnType<typeof privateKeyToAccount>) 
     maxPriorityFeePerGas: parseEther('0.000001'),
   });
   
-  // 4. Submit to backend relay
+  // 5. Submit to backend relay
   const response = await fetch('http://localhost:3000/relay', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -426,13 +453,18 @@ backend/
 
 ### Contract ABI
 
-The `backend/src/abi/ClawMachine.ts` file is **manually defined** based on the contract specification in `plan.md`. It is marked as **TEMPORARY** and must be regenerated from the actual compiled contract ABI once deployed.
+The `backend/src/abi/ClawMachine.ts` file is **synced with the actual contract** from PR #21 (`contracts/src/ClawMachine.sol`).
 
-**TODO after contract deployment:**
-1. Compile `ClawMachine.sol` with Foundry/Hardhat
-2. Extract the ABI JSON
-3. Replace `backend/src/abi/ClawMachine.ts` with the real ABI
-4. Update `CLAW_MACHINE_ADDRESS` in `.env`
+**Key contract features:**
+- `pull(bytes32 userRandomNumber, bytes[] priceUpdateData)` - Pull function with Pyth price updates
+- `getTotalFee(bytes[])` - Returns Pyth fee + Entropy fee
+- `getPythFee(bytes[])`, `getEntropyFee()` - Individual fee queries
+- Pyth oracle integration at `0xACeA761c27A909d4D3895128EBe6370FDE2dF481`
+- Price snapshots at pull request time for consistent callback execution
+
+**After contract deployment:**
+1. Set `CLAW_MACHINE_ADDRESS` in `.env` to the deployed contract address
+2. Verify `PYTH_PRICE_FEED_ADDRESS` matches the contract's Pyth oracle (default: `0xACeA761c27A909d4D3895128EBe6370FDE2dF481`)
 
 ### Dependencies on Contract
 
@@ -468,6 +500,7 @@ Test coverage:
 - ✅ Wrong function selector rejection
 - ✅ Gas limit validation
 - ✅ Zero value rejection
+- ✅ Insufficient value rejection (value < getTotalFee)
 - ✅ Valid transaction acceptance
 
 Tests use mock accounts and do not require a live Monad connection.

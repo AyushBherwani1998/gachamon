@@ -15,6 +15,7 @@ vi.mock('../config.js', async () => {
         logs: [],
       }),
       request: vi.fn().mockRejectedValue(new Error('Method not supported')),
+      readContract: vi.fn().mockResolvedValue(100000n), // Mock getTotalFee returning 100000 wei
     },
   };
 });
@@ -78,10 +79,13 @@ describe('Transaction Relay Validation', () => {
   });
   
   it('should reject transaction with gas limit too high', async () => {
+    // Valid pull(bytes32, bytes[]) calldata: selector + random + empty array
+    const validCalldata = '0x5699e2f4' + '0'.repeat(64) + '0000000000000000000000000000000000000000000000000000000000000040' + '0000000000000000000000000000000000000000000000000000000000000000';
+    
     const tx = await testAccount.signTransaction({
       to: config.clawMachineAddress,
       value: 100000n,
-      data: ('0xeb806ce4' + '0'.repeat(64)) as `0x${string}`,
+      data: validCalldata as `0x${string}`,
       chainId: 143,
       nonce: 0,
       gas: 1000000n, // Too high
@@ -95,10 +99,12 @@ describe('Transaction Relay Validation', () => {
   });
   
   it('should reject transaction with zero value', async () => {
+    const validCalldata = '0x5699e2f4' + '0'.repeat(64) + '0000000000000000000000000000000000000000000000000000000000000040' + '0000000000000000000000000000000000000000000000000000000000000000';
+    
     const tx = await testAccount.signTransaction({
       to: config.clawMachineAddress,
       value: 0n, // Should cover fees
-      data: ('0xeb806ce4' + '0'.repeat(64)) as `0x${string}`,
+      data: validCalldata as `0x${string}`,
       chainId: 143,
       nonce: 0,
       gas: 100000n,
@@ -108,14 +114,35 @@ describe('Transaction Relay Validation', () => {
     
     const result = await validateAndRelayTransaction(tx);
     expect(result.status).toBe('reverted');
-    expect(result.error).toContain('Transaction value must cover Pyth fees');
+    expect(result.error).toContain('Pyth + Entropy fees');
+  });
+  
+  it('should reject transaction with insufficient value', async () => {
+    const validCalldata = '0x5699e2f4' + '0'.repeat(64) + '0000000000000000000000000000000000000000000000000000000000000040' + '0000000000000000000000000000000000000000000000000000000000000000';
+    
+    const tx = await testAccount.signTransaction({
+      to: config.clawMachineAddress,
+      value: 50000n, // Less than required 100000
+      data: validCalldata as `0x${string}`,
+      chainId: 143,
+      nonce: 0,
+      gas: 100000n,
+      maxFeePerGas: 1000000000n,
+      maxPriorityFeePerGas: 1000000000n,
+    });
+    
+    const result = await validateAndRelayTransaction(tx);
+    expect(result.status).toBe('reverted');
+    expect(result.error).toContain('Insufficient value');
   });
   
   it('should accept valid transaction', async () => {
+    const validCalldata = '0x5699e2f4' + '0'.repeat(64) + '0000000000000000000000000000000000000000000000000000000000000040' + '0000000000000000000000000000000000000000000000000000000000000000';
+    
     const tx = await testAccount.signTransaction({
       to: config.clawMachineAddress,
-      value: 100000n, // Non-zero value for fees
-      data: ('0xeb806ce4' + '0'.repeat(64)) as `0x${string}`,
+      value: 150000n, // Sufficient value for fees (> 100000)
+      data: validCalldata as `0x${string}`,
       chainId: 143,
       nonce: 0,
       gas: 100000n,

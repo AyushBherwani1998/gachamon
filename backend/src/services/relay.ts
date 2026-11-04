@@ -7,7 +7,7 @@ import { checkRateLimit, recordPull, isDuplicateTx, recordTx } from '../utils/ra
 const PULL_SELECTOR = encodeFunctionData({
   abi: ClawMachineABI,
   functionName: 'pull',
-  args: ['0x0000000000000000000000000000000000000000000000000000000000000000'],
+  args: ['0x0000000000000000000000000000000000000000000000000000000000000000', []],
 }).slice(0, 10);
 
 export async function validateAndRelayTransaction(signedTx: string): Promise<RelayResponse> {
@@ -64,11 +64,23 @@ export async function validateAndRelayTransaction(signedTx: string): Promise<Rel
 
   // Decode calldata
   let decodedData;
+  let priceUpdateData: readonly `0x${string}`[];
   try {
     decodedData = decodeFunctionData({
       abi: ClawMachineABI,
       data: data as `0x${string}`,
     });
+    
+    // Extract priceUpdateData from args
+    if (decodedData.functionName === 'pull' && decodedData.args.length >= 2) {
+      priceUpdateData = decodedData.args[1] as readonly `0x${string}`[];
+    } else {
+      return {
+        txHash,
+        status: 'reverted',
+        error: 'Invalid pull() arguments',
+      };
+    }
   } catch (error) {
     return {
       txHash,
@@ -112,15 +124,32 @@ export async function validateAndRelayTransaction(signedTx: string): Promise<Rel
     };
   }
 
-  // Validate value (should cover fees)
-  // Note: We can't validate exact fee amount without calling contract,
-  // but we can check it's non-zero
-  if (!tx.value || tx.value === 0n) {
-    return {
-      txHash,
-      status: 'reverted',
-      error: 'Transaction value must cover Pyth fees',
-    };
+  // Validate value (should cover getTotalFee)
+  // Call contract to get the required fee
+  try {
+    const requiredFee = await publicClient.readContract({
+      address: config.clawMachineAddress,
+      abi: ClawMachineABI,
+      functionName: 'getTotalFee',
+      args: [priceUpdateData],
+    });
+    
+    if (!tx.value || tx.value < requiredFee) {
+      return {
+        txHash,
+        status: 'reverted',
+        error: `Insufficient value: ${tx.value} < ${requiredFee} (required for Pyth + Entropy fees)`,
+      };
+    }
+  } catch (error) {
+    // If contract call fails (contract not deployed yet), just check non-zero
+    if (!tx.value || tx.value === 0n) {
+      return {
+        txHash,
+        status: 'reverted',
+        error: 'Transaction value must cover Pyth + Entropy fees',
+      };
+    }
   }
 
   // Record the pull and tx
