@@ -4,7 +4,7 @@ import { TxLink } from "@/components/tx-link";
 import { Button } from "@/components/ui/8bit/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/8bit/card";
 import { useOwed } from "@/hooks/use-owed";
-import { formatToken, formatUsd6 } from "@/lib/format";
+import { formatToken } from "@/lib/format";
 
 /**
  * Shown only when a payout transfer failed and the contract recorded an owed
@@ -29,11 +29,7 @@ export function OwedPanel() {
           {entries.map((entry) => (
             <li key={entry.address} className="flex items-center justify-between gap-2 py-2">
               <span className="retro text-[9px]">{entry.symbol}</span>
-              <span className="amount text-xs">
-                {entry.symbol === "USDC"
-                  ? formatUsd6(entry.amount, 2)
-                  : formatToken(entry.amount, 8)}
-              </span>
+              <span className="amount text-xs">{formatToken(entry.amount, 8)}</span>
             </li>
           ))}
         </ul>
