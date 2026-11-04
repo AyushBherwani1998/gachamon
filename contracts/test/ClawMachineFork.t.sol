@@ -29,9 +29,13 @@ contract ClawMachineForkTest is Test {
     address constant NVDA_FEED = 0x03ffa4673c060339E6a8E5Ba1a12B3301c966bf0;
     address constant SPY_FEED = 0x2e2dA5717eDE960F8b77Af4cFcBDC4Ca3099006D;
 
-    // A mainnet account holding MON, USDC and the three xStocks. Used as the player
-    // and as the inventory source.
+    // A mainnet account holding MON and USDC. Used as the player and as a fallback
+    // inventory source (it still holds a small amount of each xStock).
     address constant ACTOR = 0xb2dC0a93841Ac49Ce0664e45D6575BA31AEA7C0e;
+
+    // The live ClawMachine on Monad mainnet. Most of the remaining xStock inventory
+    // now sits here, so the fork tests source inventory from it as well.
+    address constant LIVE_CLAW_MACHINE = 0xbC4e651C6326Ecb440b8bF54033f2ed4323C9c72;
 
     bytes32 constant PULL_RESOLVED_TOPIC =
         keccak256("PullResolved(uint256,address,bool,address[],uint256[])");
@@ -117,6 +121,7 @@ contract ClawMachineForkTest is Test {
 
     function test_Fork_FullPull_RealChainlinkAndEntropy() public {
         _fundInventory();
+        _skipIfInventoryTooLow();
 
         vm.prank(ACTOR);
         IERC20(USDC).approve(address(claw), type(uint256).max);
@@ -149,6 +154,7 @@ contract ClawMachineForkTest is Test {
 
     function test_Fork_LegendaryPull() public {
         _fundInventory();
+        _skipIfInventoryTooLow();
 
         vm.prank(ACTOR);
         IERC20(USDC).approve(address(claw), type(uint256).max);
@@ -179,11 +185,39 @@ contract ClawMachineForkTest is Test {
     // ============ Helpers ============
 
     function _fundInventory() internal {
-        vm.startPrank(ACTOR);
-        IERC20(TSLAx).transfer(address(claw), IERC20(TSLAx).balanceOf(ACTOR));
-        IERC20(NVDAx).transfer(address(claw), IERC20(NVDAx).balanceOf(ACTOR));
-        IERC20(SPYx).transfer(address(claw), IERC20(SPYx).balanceOf(ACTOR));
-        vm.stopPrank();
+        address[3] memory tokens = [TSLAx, NVDAx, SPYx];
+        address[2] memory sources = [LIVE_CLAW_MACHINE, ACTOR];
+
+        for (uint256 s = 0; s < sources.length; s++) {
+            vm.startPrank(sources[s]);
+            for (uint256 i = 0; i < tokens.length; i++) {
+                uint256 balance = IERC20(tokens[i]).balanceOf(sources[s]);
+                if (balance == 0) continue;
+                IERC20(tokens[i]).transfer(address(claw), balance);
+            }
+            vm.stopPrank();
+        }
+    }
+
+    /// @dev Live inventory can be drained by real pulls between runs. If what we moved
+    ///      in cannot cover the legendary payout check in `pull()`, skip rather than fail.
+    function _skipIfInventoryTooLow() internal {
+        address[3] memory tokens = [TSLAx, NVDAx, SPYx];
+        uint256 inventoryValue;
+
+        for (uint256 i = 0; i < tokens.length; i++) {
+            (uint256 price, ) = claw.getTokenPrice(tokens[i]);
+            uint256 balance = IERC20(tokens[i]).balanceOf(address(claw));
+            // All three xStocks use 18 decimals, same as the contract's internal scaling.
+            inventoryValue += (balance * price) / 1e18;
+        }
+
+        // Mirrors the require in ClawMachine.pull(); pendingReservations is zero here.
+        uint256 required = claw.pullPrice() * claw.legendaryMultiplier();
+        if (inventoryValue < required) {
+            // Live machine was drained below the legendary payout, so there is nothing to test.
+            vm.skip(true);
+        }
     }
 
     function _playerBalances() internal view returns (uint256[3] memory balances) {

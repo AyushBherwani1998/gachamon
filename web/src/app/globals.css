@@ -1,0 +1,216 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-pixel: "Press Start 2P", ui-monospace, monospace;
+  --font-heading: var(--font-geist-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  --background: #fff4d9;
+  --foreground: #2b1b45;
+  --card: #fffbef;
+  --card-foreground: #2b1b45;
+  --popover: #fffbef;
+  --popover-foreground: #2b1b45;
+  --primary: #7350d8;
+  --primary-foreground: #ffffff;
+  --secondary: #ffc9e0;
+  --secondary-foreground: #2b1b45;
+  --muted: #f7e6b8;
+  --muted-foreground: #5f4f72;
+  --accent: #9cf0e4;
+  --accent-foreground: #2b1b45;
+  --destructive: #b3244f;
+  --border: #2b1b45;
+  --input: #2b1b45;
+  --ring: #178f86;
+  --chart-1: #7350d8;
+  --chart-2: #d9548f;
+  --chart-3: #178f86;
+  --chart-4: #ffd24f;
+  --chart-5: #62c1ff;
+  --radius: 0rem;
+  --sidebar: #fffbef;
+  --sidebar-foreground: #2b1b45;
+  --sidebar-primary: #7350d8;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #ffc9e0;
+  --sidebar-accent-foreground: #2b1b45;
+  --sidebar-border: #2b1b45;
+  --sidebar-ring: #178f86;
+}
+
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}
+
+@layer base {
+  body {
+    background-image:
+      linear-gradient(rgb(43 27 69 / 5%) 1px, transparent 1px),
+      linear-gradient(90deg, rgb(43 27 69 / 5%) 1px, transparent 1px);
+    background-size: 32px 32px;
+  }
+
+  ::selection {
+    background: var(--primary);
+    color: var(--primary-foreground);
+  }
+
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]) {
+    transition-property: transform, background-color, border-color, color, opacity;
+    transition-duration: 150ms;
+    transition-timing-function: ease-out;
+  }
+
+  button:not(:disabled):not(.gm-packHit):active,
+  [role="button"]:not([aria-disabled="true"]):active {
+    scale: 0.96 !important;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  .amount {
+    font-family: var(--font-geist-mono), ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .pixel-shadow {
+    box-shadow: 4px 4px 0 0 rgb(43 27 69 / 30%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Phone menu. Leaving is quicker than arriving, since the user is done with it. */
+.menu-panel[data-state="open"] {
+  animation: menu-slide-in 280ms cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+.menu-panel[data-state="closed"] {
+  animation: menu-slide-out 180ms cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+.menu-overlay[data-state="open"] {
+  animation: menu-fade-in 200ms ease-out both;
+}
+
+.menu-overlay[data-state="closed"] {
+  animation: menu-fade-out 180ms ease-out both;
+}
+
+@keyframes menu-slide-in {
+  from {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes menu-slide-out {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes menu-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes menu-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes machine-shake {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  25% {
+    transform: translate3d(-3px, 0, 0);
+  }
+  50% {
+    transform: translate3d(3px, 1px, 0);
+  }
+  75% {
+    transform: translate3d(-2px, -1px, 0);
+  }
+}
+
+.machine-drawing {
+  animation: machine-shake 280ms steps(2, end) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .machine-drawing {
+    animation: none;
+  }
+}
