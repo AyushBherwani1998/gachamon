@@ -660,7 +660,7 @@
     "stateMutability": "nonpayable",
     "inputs": [
       {
-        "name": "newCallbackGasLimit",
+        "name": "newLimit",
         "type": "uint32"
       }
     ],

@@ -352,7 +352,7 @@ export const clawMachineAbi = [
     type: "function",
     name: "setCallbackGasLimit",
     stateMutability: "nonpayable",
-    inputs: [{ name: "newCallbackGasLimit", type: "uint32" }],
+    inputs: [{ name: "newLimit", type: "uint32" }],
     outputs: [],
   },
   {
