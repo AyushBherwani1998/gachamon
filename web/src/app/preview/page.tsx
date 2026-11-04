@@ -134,7 +134,7 @@ export default function PreviewPage() {
                 onRevealed={() => setRevealCount((value) => value + 1)}
               />
             </div>
-            <p className="text-center font-mono text-[10px] uppercase tracking-[0.16em] text-zinc-500">
+            <p className="text-center font-mono text-[10px] uppercase tracking-[0.16em] text-zinc-400">
               {reducedMotion
                 ? "Reduced motion · data attribute on wrapper"
                 : "Full motion · tap the card when revealed"}
@@ -147,7 +147,7 @@ export default function PreviewPage() {
                 <h2 className="font-mono text-[11px] uppercase tracking-[0.18em] text-violet-300">
                   Phase
                 </h2>
-                <span className="font-mono text-[10px] uppercase tracking-wider text-zinc-500">
+                <span className="font-mono text-[10px] uppercase tracking-wider text-zinc-400">
                   {phase}
                 </span>
               </div>
@@ -187,7 +187,7 @@ export default function PreviewPage() {
                   onClick={() => chooseResult("common")}
                 >
                   Common · one payout
-                  <span className="mt-1 block font-mono text-[9px] normal-case tracking-normal text-zinc-500">
+                  <span className="mt-1 block font-mono text-[9px] normal-case tracking-normal text-zinc-400">
                     NVDAx 0.0036 · $0.73
                   </span>
                 </button>
@@ -204,7 +204,7 @@ export default function PreviewPage() {
                   onClick={() => chooseResult("legendary")}
                 >
                   Legendary · two payouts
-                  <span className="mt-1 block font-mono text-[9px] normal-case tracking-normal text-zinc-500">
+                  <span className="mt-1 block font-mono text-[9px] normal-case tracking-normal text-zinc-400">
                     TSLAx + SPYx · $10.00
                   </span>
                 </button>
@@ -217,7 +217,7 @@ export default function PreviewPage() {
                 >
                   Replay reveal
                 </button>
-                <span className="font-mono text-[10px] uppercase tracking-wider text-zinc-500">
+                <span className="font-mono text-[10px] uppercase tracking-wider text-zinc-400">
                   onRevealed fired {revealCount}×
                 </span>
               </div>
@@ -240,13 +240,13 @@ export default function PreviewPage() {
                 />
                 <span className="font-mono text-[11px] leading-relaxed text-zinc-300">
                   Reduced motion
-                  <span className="mt-1 block text-[10px] normal-case tracking-normal text-zinc-500">
+                  <span className="mt-1 block text-[10px] normal-case tracking-normal text-zinc-400">
                     Adds data-reduced-motion=&quot;true&quot; to the wrapper and
                     remounts the machine. The OS pref is also honoured.
                   </span>
                 </span>
               </label>
-              <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-zinc-800 pt-3 font-mono text-[9px] uppercase tracking-wider text-zinc-500">
+              <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-zinc-800 pt-3 font-mono text-[9px] uppercase tracking-wider text-zinc-400">
                 <span>common 98% · $0.73</span>
                 <span>legendary 2% · $10.00</span>
                 <span>1 USDC / pull</span>
@@ -257,7 +257,7 @@ export default function PreviewPage() {
               <h2 className="mb-2 font-mono text-[11px] uppercase tracking-[0.18em] text-zinc-400">
                 Review checklist
               </h2>
-              <ul className="space-y-1.5 font-mono text-[10px] leading-relaxed text-zinc-500">
+              <ul className="space-y-1.5 font-mono text-[10px] leading-relaxed text-zinc-400">
                 <li>· Card dispenses on confirming, then jitters on drawing.</li>
                 <li>· Reveal is a button: Tab, Enter and Space all tear.</li>
                 <li>· Focus ring is visible on the card and explorer link.</li>
