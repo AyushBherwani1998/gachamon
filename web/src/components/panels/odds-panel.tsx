@@ -243,8 +243,14 @@ export function OddsPanel({
           )}
           aria-hidden={loading || undefined}
         >
-          EV = {formatPct(commonPct)} × {commonUsd} + {formatPct(legendaryPct)}{" "}
-          × {legendaryUsd}
+          {commonPct === null || legendaryPct === null ? (
+            <>EV and house edge are read from the machine parameters.</>
+          ) : (
+            <>
+              EV = {formatPct(commonPct)} × {commonUsd} +{" "}
+              {formatPct(legendaryPct)} × {legendaryUsd}
+            </>
+          )}
         </p>
       </CardContent>
     </Card>
