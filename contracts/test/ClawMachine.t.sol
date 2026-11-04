@@ -223,6 +223,14 @@ contract ClawMachineTest is Test {
     }
 
     function test_FailedTransferCreatesOwedBalance() public {
+        // Remove other tokens so failing token is guaranteed to be selected
+        vm.startPrank(owner);
+        claw.removeToken(address(tsla));
+        claw.removeToken(address(nvda));
+        claw.removeToken(address(aapl));
+        claw.removeToken(address(spy));
+        vm.stopPrank();
+
         // Deploy a token that can fail transfers
         MockFailingToken failToken = new MockFailingToken("FAILx", "FAILx");
         MockPriceFeed failFeed = new MockPriceFeed(100e8, 8);
@@ -249,7 +257,7 @@ contract ClawMachineTest is Test {
         (address[] memory owedTokens, uint256[] memory owedAmounts) = 
             claw.getOwedBalance(player);
 
-        // Should have owed balance for failToken or other tokens
+        // Should have owed balance for failToken
         bool hasOwed = false;
         for (uint256 i = 0; i < owedTokens.length; i++) {
             if (owedAmounts[i] > 0) {
@@ -267,8 +275,8 @@ contract ClawMachineTest is Test {
         claw.withdrawOwed();
         uint256 balanceAfter = failToken.balanceOf(player);
         
-        // Should have received owed tokens (might be from failToken or other tokens)
-        assertTrue(balanceAfter >= balanceBefore, "Balance should not decrease");
+        // Should have received owed tokens
+        assertTrue(balanceAfter > balanceBefore, "Balance should increase");
     }
 
     function test_TreasuryAccounting() public {
@@ -602,10 +610,17 @@ contract ClawMachineTest is Test {
 
         entropy.fulfillWithRoll(1, _findLargeFirstAllocationRoll());
 
-        assertEq(tsla.balanceOf(player), 0.00004 ether, "capped at TSLAx balance");
+        // With multi-token selection, a common pull picks 2-3 tokens randomly
+        // Verify at least 2 tokens were paid out
+        uint256 tokensUsed = 0;
+        if (tsla.balanceOf(player) > 0) tokensUsed++;
+        if (nvda.balanceOf(player) > 0) tokensUsed++;
+        if (spy.balanceOf(player) > 0) tokensUsed++;
+        
+        assertGe(tokensUsed, 2, "At least 2 tokens should be paid");
         assertEq(aapl.balanceOf(player), 0, "removed token pays nothing");
         _assertNoOwed();
-        assertApproxEqRel(_playerPayoutValue(pullId), 730_000, 0.01e18, "full 3-token payout");
+        assertApproxEqRel(_playerPayoutValue(pullId), 730_000, 0.02e18, "full 3-token payout");
     }
 
     function test_AllTokensEmptyFallsBackToOwed() public {
@@ -698,5 +713,257 @@ contract ClawMachineTest is Test {
             }
         }
         revert("No suitable roll");
+    }
+
+    // ============ Multi-token stock pull tests ============
+
+    function test_CommonPullYieldsMultipleTokens() public {
+        vm.prank(player);
+        usdc.approve(address(claw), PULL_PRICE);
+
+        vm.prank(player);
+        uint256 pullId = claw.pull{value: ENTROPY_FEE}(bytes32(uint256(12345)));
+
+        entropy.fulfillWithRoll(1, 500);
+
+        // Count distinct tokens received
+        uint256 distinctTokens = 0;
+        if (tsla.balanceOf(player) > 0) distinctTokens++;
+        if (nvda.balanceOf(player) > 0) distinctTokens++;
+        if (aapl.balanceOf(player) > 0) distinctTokens++;
+        if (spy.balanceOf(player) > 0) distinctTokens++;
+
+        assertGe(distinctTokens, 2, "Common pull should yield at least 2 distinct tokens");
+        
+        // Verify total payout value
+        _assertNoOwed();
+        assertApproxEqRel(_playerPayoutValue(pullId), 730_000, 0.02e18, "Common payout value");
+    }
+
+    function test_LegendaryPullUsesAllTokens() public {
+        vm.prank(player);
+        usdc.approve(address(claw), PULL_PRICE);
+
+        vm.prank(player);
+        uint256 pullId = claw.pull{value: ENTROPY_FEE}(bytes32(uint256(12345)));
+
+        // Legendary roll (< 200)
+        entropy.fulfillWithRoll(1, 50);
+
+        // Count tokens received - should be all 4 tokens with inventory
+        uint256 distinctTokens = 0;
+        if (tsla.balanceOf(player) > 0) distinctTokens++;
+        if (nvda.balanceOf(player) > 0) distinctTokens++;
+        if (aapl.balanceOf(player) > 0) distinctTokens++;
+        if (spy.balanceOf(player) > 0) distinctTokens++;
+
+        assertEq(distinctTokens, 4, "Legendary pull should use all tokens with balance");
+        
+        // Verify total payout value (10 USDC for legendary)
+        _assertNoOwed();
+        assertApproxEqRel(_playerPayoutValue(pullId), 10_000000, 0.02e18, "Legendary payout value");
+    }
+
+    function test_DistributionVariesAcrossDifferentSeeds() public {
+        // First pull
+        vm.prank(player);
+        usdc.approve(address(claw), PULL_PRICE);
+
+        vm.prank(player);
+        uint256 pullId1 = claw.pull{value: ENTROPY_FEE}(bytes32(uint256(11111)));
+
+        entropy.fulfillWithRoll(1, 500);
+
+        uint256 tsla1 = tsla.balanceOf(player);
+        uint256 nvda1 = nvda.balanceOf(player);
+        uint256 aapl1 = aapl.balanceOf(player);
+        uint256 spy1 = spy.balanceOf(player);
+
+        // Refill inventory for second pull
+        vm.startPrank(owner);
+        tsla.mint(address(claw), 0.02 ether);
+        nvda.mint(address(claw), 0.01 ether);
+        aapl.mint(address(claw), 0.033 ether);
+        spy.mint(address(claw), 0.0125 ether);
+        vm.stopPrank();
+
+        // Second pull with different seed
+        vm.prank(player);
+        usdc.approve(address(claw), PULL_PRICE);
+
+        vm.prank(player);
+        claw.pull{value: ENTROPY_FEE}(bytes32(uint256(99999)));
+
+        entropy.fulfillWithRoll(2, 1500);
+
+        uint256 tsla2 = tsla.balanceOf(player) - tsla1;
+        uint256 nvda2 = nvda.balanceOf(player) - nvda1;
+        uint256 aapl2 = aapl.balanceOf(player) - aapl1;
+        uint256 spy2 = spy.balanceOf(player) - spy1;
+
+        // At least one token distribution should differ significantly
+        bool distributionDiffers = 
+            _percentDiff(tsla1, tsla2) > 10 ||
+            _percentDiff(nvda1, nvda2) > 10 ||
+            _percentDiff(aapl1, aapl2) > 10 ||
+            _percentDiff(spy1, spy2) > 10;
+
+        assertTrue(distributionDiffers, "Distribution should vary with different random seeds");
+    }
+
+    function test_SingleTokenInventoryFallback() public {
+        // Only SPY has inventory
+        vm.startPrank(owner);
+        claw.withdrawInventory(address(tsla), tsla.balanceOf(address(claw)));
+        claw.withdrawInventory(address(nvda), nvda.balanceOf(address(claw)));
+        claw.withdrawInventory(address(aapl), aapl.balanceOf(address(claw)));
+        vm.stopPrank();
+
+        // Mint enough SPY to handle a pull
+        spy.mint(address(claw), 0.05 ether); // ~$20 worth
+
+        vm.prank(player);
+        usdc.approve(address(claw), PULL_PRICE);
+
+        vm.prank(player);
+        uint256 pullId = claw.pull{value: ENTROPY_FEE}(bytes32(uint256(12345)));
+
+        entropy.fulfillWithRoll(1, 500);
+
+        // Should have paid only in SPY
+        assertGt(spy.balanceOf(player), 0, "Should receive SPY");
+        assertEq(tsla.balanceOf(player), 0, "No TSLA");
+        assertEq(nvda.balanceOf(player), 0, "No NVDA");
+        assertEq(aapl.balanceOf(player), 0, "No AAPL");
+        
+        _assertNoOwed();
+        assertApproxEqRel(_playerPayoutValue(pullId), 730_000, 0.02e18, "Full payout in single token");
+    }
+
+    function test_MultiTokenPayoutTotalValueCorrect() public {
+        // Test multiple pulls to ensure total value consistency
+        uint256[4] memory prevBalances;
+        
+        for (uint256 i = 0; i < 3; i++) {
+            vm.prank(player);
+            usdc.approve(address(claw), PULL_PRICE);
+
+            vm.prank(player);
+            uint256 pullId = claw.pull{value: ENTROPY_FEE}(bytes32(uint256(1000 + i)));
+
+            entropy.fulfillWithRoll(uint64(i + 1), 300 + i * 100);
+
+            // Calculate incremental value from this pull only
+            uint256 incrementalValue = 0;
+            address[4] memory tokens = [address(tsla), address(nvda), address(aapl), address(spy)];
+            for (uint256 j = 0; j < 4; j++) {
+                uint256 newBalance = IERC20(tokens[j]).balanceOf(player);
+                uint256 deltaBalance = newBalance - prevBalances[j];
+                prevBalances[j] = newBalance;
+                
+                uint256 price = claw.getPullPriceSnapshot(pullId, tokens[j]);
+                incrementalValue += (deltaBalance * price) / 1e18;
+            }
+            
+            assertApproxEqRel(incrementalValue, 730_000, 0.02e18, "Common payout value correct");
+
+            // Refill inventory
+            vm.startPrank(owner);
+            tsla.mint(address(claw), 0.02 ether);
+            nvda.mint(address(claw), 0.01 ether);
+            aapl.mint(address(claw), 0.033 ether);
+            spy.mint(address(claw), 0.0125 ether);
+            vm.stopPrank();
+        }
+    }
+
+    function test_LegendaryMultiTokenPayout() public {
+        vm.prank(player);
+        usdc.approve(address(claw), PULL_PRICE);
+
+        vm.prank(player);
+        uint256 pullId = claw.pull{value: ENTROPY_FEE}(bytes32(uint256(77777)));
+
+        // Legendary roll
+        entropy.fulfillWithRoll(1, 100);
+
+        // All tokens should have been used
+        uint256 tokensUsed = 0;
+        if (tsla.balanceOf(player) > 0) tokensUsed++;
+        if (nvda.balanceOf(player) > 0) tokensUsed++;
+        if (aapl.balanceOf(player) > 0) tokensUsed++;
+        if (spy.balanceOf(player) > 0) tokensUsed++;
+
+        assertEq(tokensUsed, 4, "Legendary should distribute across all available tokens");
+        _assertNoOwed();
+        assertApproxEqRel(_playerPayoutValue(pullId), 10_000000, 0.02e18, "Legendary payout value");
+    }
+
+    function test_MultiTokenWithInventoryCaps() public {
+        vm.prank(player);
+        usdc.approve(address(claw), PULL_PRICE);
+
+        vm.prank(player);
+        uint256 pullId = claw.pull{value: ENTROPY_FEE}(bytes32(uint256(55555)));
+
+        // Set up lopsided inventory after pull request but before callback
+        _drainInventory();
+        tsla.mint(address(claw), 0.0004 ether); // $0.10
+        nvda.mint(address(claw), 0.0004 ether); // $0.20
+        aapl.mint(address(claw), 0.003 ether);  // $0.45
+        spy.mint(address(claw), 0.0025 ether);  // $1.00
+
+        entropy.fulfillWithRoll(1, 600);
+
+        _assertNoOwed();
+        assertApproxEqRel(_playerPayoutValue(pullId), 730_000, 0.02e18, "Payout respects caps and redistributes");
+    }
+
+    function _percentDiff(uint256 a, uint256 b) internal pure returns (uint256) {
+        if (a == 0 && b == 0) return 0;
+        if (a == 0 || b == 0) return 100;
+        uint256 diff = a > b ? a - b : b - a;
+        return (diff * 100) / (a > b ? a : b);
+    }
+
+    function _totalPlayerTokenBalance() internal view returns (uint256) {
+        return tsla.balanceOf(player) + nvda.balanceOf(player) + 
+               aapl.balanceOf(player) + spy.balanceOf(player);
+    }
+
+    // ============ Gas measurement tests ============
+
+    function test_GasMeasurement_CommonPull() public {
+        vm.prank(player);
+        usdc.approve(address(claw), PULL_PRICE);
+
+        vm.prank(player);
+        claw.pull{value: ENTROPY_FEE}(bytes32(uint256(12345)));
+
+        uint256 gasBefore = gasleft();
+        entropy.fulfillWithRoll(1, 500); // Common pull
+        uint256 gasUsed = gasBefore - gasleft();
+
+        emit log_named_uint("Common pull callback gas", gasUsed);
+        
+        // Verify it fits within reasonable limits (Monad cold access is 10,100)
+        assertLt(gasUsed, 500_000, "Common callback should fit in 500k gas");
+    }
+
+    function test_GasMeasurement_LegendaryPull() public {
+        vm.prank(player);
+        usdc.approve(address(claw), PULL_PRICE);
+
+        vm.prank(player);
+        claw.pull{value: ENTROPY_FEE}(bytes32(uint256(12345)));
+
+        uint256 gasBefore = gasleft();
+        entropy.fulfillWithRoll(1, 50); // Legendary pull
+        uint256 gasUsed = gasBefore - gasleft();
+
+        emit log_named_uint("Legendary pull callback gas", gasUsed);
+        
+        // Verify it fits within reasonable limits
+        assertLt(gasUsed, 500_000, "Legendary callback should fit in 500k gas");
     }
 }

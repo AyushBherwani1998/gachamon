@@ -261,7 +261,8 @@ contract ClawMachine is IEntropyConsumer, ReentrancyGuard, Pausable, Ownable {
         (address[] memory stocks, uint256[] memory amounts) = _selectStocks(
             randomNumber,
             payoutUSDC,
-            pullId
+            pullId,
+            legendary
         );
 
         // Transfer xStocks to player (with failure handling)
@@ -648,10 +649,11 @@ contract ClawMachine is IEntropyConsumer, ReentrancyGuard, Pausable, Ownable {
      * @param randomNumber The random number from Pyth Entropy
      * @param totalPayoutUSDC Total payout value in USDC
      * @param pullId The pull ID (to access price snapshot)
+     * @param legendary Whether this is a legendary pull
      * @return stocks Array of stock addresses
      * @return amounts Array of amounts in token native decimals
      */
-    function _selectStocks(bytes32 randomNumber, uint256 totalPayoutUSDC, uint256 pullId)
+    function _selectStocks(bytes32 randomNumber, uint256 totalPayoutUSDC, uint256 pullId, bool legendary)
         internal
         view
         returns (address[] memory stocks, uint256[] memory amounts)
@@ -659,56 +661,161 @@ contract ClawMachine is IEntropyConsumer, ReentrancyGuard, Pausable, Ownable {
         uint256 numTokens = supportedTokens.length;
         require(numTokens > 0, "No supported tokens");
 
-        Pull storage pullData = pulls[pullId];
         stocks = new address[](numTokens);
         amounts = new uint256[](numTokens);
+        
+        // Build capacities and prices
+        (uint256[] memory prices, uint256[] memory capacities, uint256 availableTokenCount) = 
+            _buildCapacities(pullId, numTokens);
 
-        uint256[] memory prices = new uint256[](numTokens);
-        uint256[] memory capacities = new uint256[](numTokens);
-        uint256[] memory allocatedUSDC = new uint256[](numTokens);
+        // If no inventory, create owed balance for first token with a price
+        if (availableTokenCount == 0) {
+            for (uint256 i = 0; i < numTokens; i++) {
+                stocks[i] = supportedTokens[i];
+                if (prices[i] > 0) {
+                    uint256 amountIn1e18 = (totalPayoutUSDC * PRICE_PRECISION) / prices[i];
+                    amounts[i] = _fromStandardDecimals(amountIn1e18, tokenInfo[stocks[i]].decimals);
+                    return (stocks, amounts);
+                }
+            }
+            return (stocks, amounts);
+        }
 
-        // A token can only pay out what the machine currently holds, valued at the
-        // pull-time snapshot price. Without this cap a random split could assign the
-        // payout to an empty token and turn a real payout into an IOU.
+        // Determine which tokens to include
+        bool[] memory includeToken = _selectTokensForPull(
+            randomNumber, 
+            capacities, 
+            availableTokenCount, 
+            legendary, 
+            numTokens
+        );
+
+        // Allocate payout by weight
+        uint256[] memory allocatedUSDC = _allocatePayoutByWeight(
+            randomNumber,
+            totalPayoutUSDC,
+            includeToken,
+            capacities,
+            prices,
+            numTokens
+        );
+
+        // Convert allocations to token amounts
+        for (uint256 i = 0; i < numTokens; i++) {
+            stocks[i] = supportedTokens[i];
+            if (allocatedUSDC[i] == 0 || prices[i] == 0) continue;
+
+            uint256 amountIn1e18 = (allocatedUSDC[i] * PRICE_PRECISION) / prices[i];
+            amounts[i] = _fromStandardDecimals(amountIn1e18, tokenInfo[stocks[i]].decimals);
+        }
+    }
+
+    /**
+     * @notice Build capacities array for all tokens
+     */
+    function _buildCapacities(uint256 pullId, uint256 numTokens)
+        internal
+        view
+        returns (uint256[] memory prices, uint256[] memory capacities, uint256 availableTokenCount)
+    {
+        Pull storage pullData = pulls[pullId];
+        prices = new uint256[](numTokens);
+        capacities = new uint256[](numTokens);
+        availableTokenCount = 0;
+        
         for (uint256 i = 0; i < numTokens; i++) {
             address token = supportedTokens[i];
             TokenInfo memory info = tokenInfo[token];
-            stocks[i] = token;
             prices[i] = pullData.priceSnapshot[token];
             if (prices[i] == 0) continue;
 
             uint256 balance = IERC20(token).balanceOf(address(this));
-            if (balance == 0) continue;
-
-            uint256 balanceIn1e18 = _toStandardDecimals(balance, info.decimals);
-            capacities[i] = (balanceIn1e18 * prices[i]) / PRICE_PRECISION;
+            
+            uint256 balanceIn1e18 = balance > 0 ? _toStandardDecimals(balance, info.decimals) : 0;
+            capacities[i] = balance > 0 ? (balanceIn1e18 * prices[i]) / PRICE_PRECISION : 0;
+            if (capacities[i] > 0) availableTokenCount++;
         }
+    }
 
-        // Keep the random split, but never allocate more than a token can cover.
-        uint256 remainingUSDC = totalPayoutUSDC;
-        for (uint256 i = 0; i < numTokens && remainingUSDC > 0; i++) {
-            if (capacities[i] == 0) continue;
+    /**
+     * @notice Select which tokens to include in pull
+     */
+    function _selectTokensForPull(
+        bytes32 randomNumber,
+        uint256[] memory capacities,
+        uint256 availableTokenCount,
+        bool legendary,
+        uint256 numTokens
+    ) internal pure returns (bool[] memory includeToken) {
+        includeToken = new bool[](numTokens);
 
-            uint256 allocationUSDC;
-            if (i == numTokens - 1) {
-                allocationUSDC = remainingUSDC;
-            } else {
-                uint256 seed = uint256(keccak256(abi.encodePacked(randomNumber, i)));
-                uint256 allocationBps = seed % (BPS_DENOMINATOR + 1);
-                allocationUSDC = (remainingUSDC * allocationBps) / BPS_DENOMINATOR;
+        if (legendary || availableTokenCount == 1) {
+            // Legendary: use all tokens with balance
+            for (uint256 i = 0; i < numTokens; i++) {
+                if (capacities[i] > 0) {
+                    includeToken[i] = true;
+                }
             }
+        } else {
+            // Common: pick random subset of 2..N tokens
+            uint256 targetCount = 2 + (uint256(keccak256(abi.encode(randomNumber, "count"))) % (availableTokenCount - 1));
+            
+            uint256[] memory availableIndices = new uint256[](availableTokenCount);
+            uint256 idx = 0;
+            for (uint256 i = 0; i < numTokens; i++) {
+                if (capacities[i] > 0) {
+                    availableIndices[idx++] = i;
+                }
+            }
+            
+            for (uint256 i = 0; i < targetCount; i++) {
+                bytes32 pickSeed = keccak256(abi.encode(randomNumber, "pick", i));
+                uint256 pickIdx = uint256(pickSeed) % (availableTokenCount - i);
+                includeToken[availableIndices[pickIdx]] = true;
+                availableIndices[pickIdx] = availableIndices[availableTokenCount - i - 1];
+            }
+        }
+    }
 
-            if (allocationUSDC > capacities[i]) allocationUSDC = capacities[i];
-            if (allocationUSDC > remainingUSDC) allocationUSDC = remainingUSDC;
-
-            allocatedUSDC[i] = allocationUSDC;
-            remainingUSDC -= allocationUSDC;
+    /**
+     * @notice Allocate payout by weight across selected tokens
+     */
+    function _allocatePayoutByWeight(
+        bytes32 randomNumber,
+        uint256 totalPayoutUSDC,
+        bool[] memory includeToken,
+        uint256[] memory capacities,
+        uint256[] memory prices,
+        uint256 numTokens
+    ) internal pure returns (uint256[] memory allocatedUSDC) {
+        allocatedUSDC = new uint256[](numTokens);
+        
+        // Generate weights
+        uint256 totalWeight = 0;
+        for (uint256 i = 0; i < numTokens; i++) {
+            if (includeToken[i]) {
+                uint256 weight = 1 + (uint256(keccak256(abi.encode(randomNumber, i))) % 10000);
+                totalWeight += weight;
+                allocatedUSDC[i] = weight; // Temporarily store weight
+            }
         }
 
-        // Give anything the caps left behind to tokens that still have spare balance,
-        // in order. This is what makes an empty token harmless instead of an IOU.
+        // Convert weights to allocations
+        uint256 remainingUSDC = totalPayoutUSDC;
+        for (uint256 i = 0; i < numTokens; i++) {
+            if (!includeToken[i]) continue;
+
+            uint256 targetUSDC = (totalPayoutUSDC * allocatedUSDC[i]) / totalWeight;
+            uint256 allocation = targetUSDC > capacities[i] ? capacities[i] : targetUSDC;
+            if (allocation > remainingUSDC) allocation = remainingUSDC;
+
+            allocatedUSDC[i] = allocation;
+            remainingUSDC -= allocation;
+        }
+
+        // Redistribute remainder
         for (uint256 i = 0; i < numTokens && remainingUSDC > 0; i++) {
-            if (allocatedUSDC[i] >= capacities[i]) continue;
+            if (!includeToken[i] || allocatedUSDC[i] >= capacities[i]) continue;
 
             uint256 spare = capacities[i] - allocatedUSDC[i];
             uint256 extra = remainingUSDC < spare ? remainingUSDC : spare;
@@ -716,9 +823,7 @@ contract ClawMachine is IEntropyConsumer, ReentrancyGuard, Pausable, Ownable {
             remainingUSDC -= extra;
         }
 
-        // Only when the whole inventory cannot cover the payout, assign the uncovered
-        // part to a token with no balance so the existing transfer fallback records it
-        // as an owed balance instead of silently dropping it.
+        // Handle shortfall: assign to a token with no balance so it becomes owed
         if (remainingUSDC > 0) {
             uint256 shortfallIndex = type(uint256).max;
             for (uint256 i = 0; i < numTokens; i++) {
@@ -732,13 +837,6 @@ contract ClawMachine is IEntropyConsumer, ReentrancyGuard, Pausable, Ownable {
             if (shortfallIndex != type(uint256).max) {
                 allocatedUSDC[shortfallIndex] += remainingUSDC;
             }
-        }
-
-        for (uint256 i = 0; i < numTokens; i++) {
-            if (allocatedUSDC[i] == 0 || prices[i] == 0) continue;
-
-            uint256 amountIn1e18 = (allocatedUSDC[i] * PRICE_PRECISION) / prices[i];
-            amounts[i] = _fromStandardDecimals(amountIn1e18, tokenInfo[stocks[i]].decimals);
         }
     }
 
