@@ -76,7 +76,7 @@ export default function Home() {
     balances.mon !== undefined &&
     balances.mon < machine.entropyFee;
   const usdcReady = demo || isDeployed(deployment.usdc);
-  const machineReady = demo || (machine.isDeployed && machine.pullable);
+  const machineReady = demo || (machine.isDeployed && !machine.isLoading && machine.pullable);
   const pullPriceLabel = `Pull · ${usdPlain(machine.pullPrice ?? 1_000_000n)} USDC`;
   const gachaPhase = pull.phase === "preparing" ? "confirming" : pull.phase;
 
