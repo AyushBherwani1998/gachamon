@@ -116,6 +116,11 @@ export const monad: Chain = network === 'testnet' ? monadTestnet : monadMainnet;
 
 const startBlockConfigured = process.env.START_BLOCK !== undefined && process.env.START_BLOCK !== '';
 
+export const clawMachineAddress = parseAddress(
+  process.env.CLAW_MACHINE_ADDRESS,
+  'CLAW_MACHINE_ADDRESS',
+);
+
 export const config = {
   network,
   chainId,
@@ -128,9 +133,8 @@ export const config = {
     process.env.WS_URL ||
     (network === 'testnet' ? 'wss://testnet-rpc.monad.xyz' : 'wss://rpc.monad.xyz'),
 
-  clawMachineAddress: parseAddress(process.env.CLAW_MACHINE_ADDRESS, 'CLAW_MACHINE_ADDRESS'),
-  isClawMachineConfigured:
-    parseAddress(process.env.CLAW_MACHINE_ADDRESS, 'CLAW_MACHINE_ADDRESS') !== ZERO_ADDRESS,
+  clawMachineAddress,
+  isClawMachineConfigured: clawMachineAddress !== ZERO_ADDRESS,
 
   // Deployment block of the ClawMachine contract. Used when the local indexer
   // has no checkpoint yet.
