@@ -85,9 +85,10 @@ switch. On testnet the wallet panel shows **Get test USDC** (calls
 
 ## Contract interface
 
-`src/abi/clawMachine.ts` is the typed ABI (`src/abi/ClawMachine.json` is
-generated from it) and targets the Chainlink version of the contract on
-`fix/claw-pyth-entropy`:
+`src/abi/ClawMachine.json` is synced from the compiled
+`contracts/out/ClawMachine.sol/ClawMachine.json` on
+`fix/claw-pyth-entropy`; `src/abi/clawMachine.ts` exports the same ABI as a
+typed `as const` value. It targets the Chainlink version of the contract:
 
 - `pull(bytes32 userRandomNumber)` payable — no price update data
 - `getFee()` / `getEntropyFee()` — the Entropy fee; the whole `msg.value`
