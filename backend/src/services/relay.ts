@@ -1,14 +1,21 @@
-import { parseTransaction, decodeFunctionData, encodeFunctionData, getAddress, recoverTransactionAddress, keccak256 } from 'viem';
-import { publicClient, config } from '../config.js';
+import {
+  decodeFunctionData,
+  encodeFunctionData,
+  getAddress,
+  keccak256,
+  parseEventLogs,
+  parseTransaction,
+  recoverTransactionAddress,
+} from 'viem';
+import { config, publicClient } from '../config.js';
 import { ClawMachineABI } from '../abi/ClawMachine.js';
 import { RelayResponse } from '../types/index.js';
 import { checkRateLimit, recordPull, isDuplicateTx, recordTx } from '../utils/rateLimiter.js';
 
-const PULL_SELECTOR = encodeFunctionData({
+export const PULL_SELECTOR = encodeFunctionData({
   abi: ClawMachineABI,
   functionName: 'pull',
-  args: ['0x0000000000000000000000000000000000000000000000000000000000000000', []],
-}).slice(0, 10);
+});
 
 export async function validateAndRelayTransaction(signedTx: string): Promise<RelayResponse> {
   let tx;
@@ -22,10 +29,9 @@ export async function validateAndRelayTransaction(signedTx: string): Promise<Rel
     };
   }
 
-  // Compute transaction hash
+  // Transaction hash is keccak256 of the serialized signed transaction.
   const txHash = keccak256(signedTx as `0x${string}`);
 
-  // Check for duplicate
   if (isDuplicateTx(txHash)) {
     return {
       txHash,
@@ -34,16 +40,14 @@ export async function validateAndRelayTransaction(signedTx: string): Promise<Rel
     };
   }
 
-  // Validate chain ID
-  if (tx.chainId !== 143) {
+  if (tx.chainId !== config.chainId) {
     return {
       txHash,
       status: 'reverted',
-      error: `Invalid chain ID: expected 143, got ${tx.chainId}`,
+      error: `Invalid chain ID: expected ${config.chainId}, got ${tx.chainId}`,
     };
   }
 
-  // Validate 'to' address
   if (!tx.to || getAddress(tx.to) !== getAddress(config.clawMachineAddress)) {
     return {
       txHash,
@@ -52,33 +56,27 @@ export async function validateAndRelayTransaction(signedTx: string): Promise<Rel
     };
   }
 
-  // Validate function selector
+  // The audited contract exposes pull() with no calldata arguments.
   const data = tx.data || '0x';
-  if (!data.startsWith(PULL_SELECTOR)) {
+  if (data.slice(0, 10).toLowerCase() !== PULL_SELECTOR.toLowerCase()) {
     return {
       txHash,
       status: 'reverted',
-      error: `Invalid function selector: expected pull()`,
+      error: 'Invalid function selector: expected pull()',
     };
   }
 
-  // Decode calldata
-  let decodedData;
-  let priceUpdateData: readonly `0x${string}`[];
   try {
-    decodedData = decodeFunctionData({
+    const decoded = decodeFunctionData({
       abi: ClawMachineABI,
       data: data as `0x${string}`,
     });
-    
-    // Extract priceUpdateData from args
-    if (decodedData.functionName === 'pull' && decodedData.args.length >= 2) {
-      priceUpdateData = decodedData.args[1] as readonly `0x${string}`[];
-    } else {
+
+    if (decoded.functionName !== 'pull') {
       return {
         txHash,
         status: 'reverted',
-        error: 'Invalid pull() arguments',
+        error: 'Invalid function: expected pull()',
       };
     }
   } catch (error) {
@@ -89,7 +87,6 @@ export async function validateAndRelayTransaction(signedTx: string): Promise<Rel
     };
   }
 
-  // Validate gas limit
   if (tx.gas && tx.gas > config.maxGasLimit) {
     return {
       txHash,
@@ -98,13 +95,11 @@ export async function validateAndRelayTransaction(signedTx: string): Promise<Rel
     };
   }
 
-  // Recover sender from transaction
   let sender: string;
   try {
-    // Cast to the proper serialized transaction type
-    type SerializedTx = `0x02${string}` | `0x01${string}` | `0x03${string}` | `0x04${string}`;
     sender = await recoverTransactionAddress({
-      serializedTransaction: signedTx as SerializedTx,
+      serializedTransaction:
+        signedTx as Parameters<typeof recoverTransactionAddress>[0]['serializedTransaction'],
     });
   } catch (error) {
     return {
@@ -114,66 +109,57 @@ export async function validateAndRelayTransaction(signedTx: string): Promise<Rel
     };
   }
 
-  // Check rate limit
   const rateLimit = checkRateLimit(sender);
   if (!rateLimit.allowed) {
     return {
       txHash,
       status: 'reverted',
-      error: `Rate limited: please wait ${Math.ceil(rateLimit.waitTime! / 1000)}s`,
+      error: `Rate limited: please wait ${Math.ceil((rateLimit.waitTime ?? 0) / 1000)}s`,
     };
   }
 
-  // Validate value (should cover getTotalFee)
-  // Call contract to get the required fee
+  // msg.value must cover the Pyth Entropy fee reported by the contract.
+  let requiredFee: bigint;
   try {
-    const requiredFee = await publicClient.readContract({
+    requiredFee = await publicClient.readContract({
       address: config.clawMachineAddress,
       abi: ClawMachineABI,
-      functionName: 'getTotalFee',
-      args: [priceUpdateData],
+      functionName: 'getFee',
     });
-    
-    if (!tx.value || tx.value < requiredFee) {
-      return {
-        txHash,
-        status: 'reverted',
-        error: `Insufficient value: ${tx.value} < ${requiredFee} (required for Pyth + Entropy fees)`,
-      };
-    }
   } catch (error) {
-    // If contract call fails (contract not deployed yet), just check non-zero
-    if (!tx.value || tx.value === 0n) {
-      return {
-        txHash,
-        status: 'reverted',
-        error: 'Transaction value must cover Pyth + Entropy fees',
-      };
-    }
+    return {
+      txHash,
+      status: 'reverted',
+      error: 'Unable to read getFee() from ClawMachine; check CLAW_MACHINE_ADDRESS and RPC_URL',
+    };
   }
 
-  // Record the pull and tx
+  if ((tx.value ?? 0n) < requiredFee) {
+    return {
+      txHash,
+      status: 'reverted',
+      error: `Insufficient value: ${tx.value ?? 0n} < ${requiredFee} (getFee())`,
+    };
+  }
+
   recordPull(sender);
   recordTx(txHash);
 
-  // Broadcast transaction
   try {
-    // Try eth_sendRawTransactionSync first (Monad-specific)
     let broadcastHash: `0x${string}`;
     try {
-      const hash = await publicClient.request({
+      // Monad supports synchronous broadcast returning the transaction hash.
+      const hash = (await publicClient.request({
         method: 'eth_sendRawTransactionSync' as any,
         params: [signedTx as `0x${string}`],
-      }) as string;
+      })) as string;
       broadcastHash = hash as `0x${string}`;
     } catch (syncError) {
-      // Fallback to standard eth_sendRawTransaction
       broadcastHash = await publicClient.sendRawTransaction({
         serializedTransaction: signedTx as `0x${string}`,
       });
     }
 
-    // Wait for receipt
     const receipt = await publicClient.waitForTransactionReceipt({
       hash: broadcastHash,
       timeout: 30_000,
@@ -187,24 +173,18 @@ export async function validateAndRelayTransaction(signedTx: string): Promise<Rel
       };
     }
 
-    // Extract pullId from PullRequested event
-    let pullId: string | undefined;
-    for (const log of receipt.logs) {
-      try {
-        if (log.topics[0] === '0x' + 'PullRequested'.padStart(64, '0')) {
-          pullId = log.topics[1]; // pullId is first indexed parameter
-          break;
-        }
-      } catch {}
-    }
+    const [requested] = parseEventLogs({
+      abi: ClawMachineABI,
+      eventName: 'PullRequested',
+      logs: receipt.logs,
+    });
 
     return {
       txHash: broadcastHash,
       status: 'success',
-      pullId,
+      pullId: requested?.args.pullId.toString(),
     };
   } catch (error: any) {
-    // Handle specific errors
     if (error.message?.includes('nonce too low')) {
       return {
         txHash,

@@ -1,531 +1,465 @@
 # xStocks Claw Machine Backend
 
-Backend relay and indexer service for the xStocks Claw Machine on Monad mainnet (chain 143).
+Backend indexer, REST API, WebSocket feed, and optional transaction relay for the
+xStocks Claw Machine on Monad.
 
-## Architecture: Option A Relay
+The service targets the **audited `ClawMachine` contract** (PR #14):
 
-The frontend builds and signs the complete `pull(bytes32 userRandomNumber, bytes[] priceUpdateData)` transaction (player pays gas + fees in MON), then POSTs the raw signed transaction hex to the backend. The backend validates and broadcasts it to the Monad network.
+- `pull()` takes **no calldata arguments** and pays `pullPrice` USDC via
+  `transferFrom`; `msg.value` must cover `getFee()` (the Pyth Entropy fee).
+- Randomness and payouts happen in the Pyth Entropy callback. There is no claim
+  step.
+- Pyth price feeds are **not** used by the backend. There is no
+  `priceUpdateData`, `getPythFee()`, or `getTotalFee()` path.
+- Supported networks: Monad mainnet (`143`) and testnet (`10143`).
 
-**Transaction Flow:**
-1. Frontend fetches Pyth price updates from Hermes API
-2. Frontend signs transaction with `priceUpdateData` (player pays Pyth fee + Entropy fee + gas)
-3. Backend validates: chain ID, recipient, function selector, gas limit, value ≥ `getTotalFee(priceUpdateData)`
-4. Backend broadcasts transaction to Monad RPC
+## Architecture
 
-This approach:
-- ✅ Player controls their own transaction signing
-- ✅ No private keys stored on backend
-- ✅ Backend only validates and relays
-- ✅ Backend never pays gas
-- ✅ Integrates with Pyth on-chain price feeds
+```
+                 ┌──────────────────────────┐
+  Monad RPC ───▶ │ indexer (eth_getLogs)    │ ──▶ SQLite
+                 │ 100-block pages          │
+                 └────────────┬─────────────┘
+                              │
+                 ┌────────────▼─────────────┐
+                 │ Hono REST + WS /events   │ ──▶ web app / clients
+                 └────────────▲─────────────┘
+                              │
+                 ┌────────────┴─────────────┐
+                 │ optional /relay          │
+                 │ validates, never signs   │
+                 └──────────────────────────┘
+```
+
+The relay is **off by default** (`RELAY_ENABLED=false`). Players can always
+submit a signed `pull()` transaction directly to Monad. When enabled, the relay
+only validates and broadcasts a transaction the player already signed. The
+backend never stores private keys and never pays gas.
 
 ## Features
 
-- **Transaction Relay** (`POST /relay`): Validates and broadcasts signed pull transactions
-- **Machine Status** (`GET /machine`): Live reads from the ClawMachine contract
-- **Price Updates** (`GET /price-update`): Fetches Pyth price update data for xStocks
-- **Event Indexer**: Watches and indexes all ClawMachine events
-- **Pull History** (`GET /pulls/:id`, `GET /players/:address/pulls`)
-- **Leaderboard** (`GET /leaderboard`)
-- **Real-time Events** (`WebSocket /events`): Pushes PullResolved events for reveal animations
+- **Event indexer**: `PullRequested`, `PullResolved`, and `PullRefunded`, stored
+  in SQLite with a resumable block checkpoint.
+- **Machine status** (`GET /machine`): live reads of `canPull`, `pullPrice`,
+  `inventoryValueUsd6`, `reservedValueUsd6`, `getFee`, `totalPulls`, `paused`.
+- **Pull history**: recent pulls, pull by id, pulls and stats by player.
+- **Leaderboard**: ranked by actual `valueUsd6` paid out.
+- **Real-time feed** (`WS /events`): pushes indexed `PullRequested`,
+  `PullResolved`, and `PullRefunded` events for reveal animations.
+- **Optional relay** (`POST /relay`): validates chain, recipient, selector,
+  gas limit, and `msg.value >= getFee()`.
 
 ## Requirements
 
 - Node.js 20+
-- TypeScript
-- SQLite (via better-sqlite3)
+- npm (the repo uses `package-lock.json`)
+- SQLite via `better-sqlite3` (installed automatically)
 
 ## Installation
 
 ```bash
+cd backend
 npm install
 ```
 
 ## Configuration
 
-Copy `.env.example` to `.env` and configure:
+Copy the template and fill in the deployed contract details:
 
 ```bash
 cp .env.example .env
 ```
 
-Required environment variables:
+| Variable | Default | Purpose |
+|---|---|---|
+| `NETWORK` | `mainnet` | `mainnet` (143) or `testnet` (10143) |
+| `PORT` | `3000` | HTTP/WebSocket port |
+| `RPC_URL` | network default | Monad HTTP RPC |
+| `WS_URL` | network default | Monad WebSocket RPC (reserved) |
+| `CLAW_MACHINE_ADDRESS` | zero address | Deployed `ClawMachine` address |
+| `START_BLOCK` | unset | Block the contract was deployed at |
+| `INDEXER_BLOCK_RANGE` | `100` | Blocks per `eth_getLogs` request |
+| `INDEXER_POLL_INTERVAL_MS` | `3000` | How often to poll the chain head |
+| `RELAY_ENABLED` | `false` | Set `true` to expose `POST /relay` |
+| `MAX_GAS_LIMIT` | `500000` | Reject relayed transactions above this gas limit |
+| `RATE_LIMIT_WINDOW_MS` | `3000` | Per-address relay rate limit |
+| `DATABASE_PATH` | `claw-machine.db` | SQLite file |
 
-```env
-PORT=3000
-RPC_URL=https://rpc.monad.xyz
-WS_URL=wss://rpc.monad.xyz
-CLAW_MACHINE_ADDRESS=0x... # Set after contract deployment
-```
+Default RPCs:
+
+- Mainnet: `https://rpc.monad.xyz` / `wss://rpc.monad.xyz`
+- Testnet: `https://testnet-rpc.monad.xyz` / `wss://testnet-rpc.monad.xyz`
+
+`CLAW_MACHINE_ADDRESS` and `START_BLOCK` come from the deployment output. The
+contracts deploy script only writes addresses on `--broadcast`, so use the
+address and block from the broadcast run.
+
+If `START_BLOCK` is omitted, the indexer starts at the current chain head and
+only indexes new pulls. Set it to backfill history.
 
 ## Running
 
 ### Development
+
 ```bash
 npm run dev
 ```
 
 ### Production
+
 ```bash
 npm run build
 npm start
 ```
 
-### Testing
+### Tests and type checks
+
 ```bash
-npm test          # Run tests once
-npm run test:watch # Watch mode
-npm run typecheck  # Type checking only
+npm test
+npm run typecheck
 ```
 
-## API Endpoints
+## API
 
-### POST /relay
+### `GET /`
 
-Validate and broadcast a signed pull transaction.
+Health check. Returns the configured network, chain id, and relay status.
+
+```json
+{
+  "status": "ok",
+  "service": "xStocks Claw Machine Backend",
+  "network": "mainnet",
+  "chainId": 143,
+  "relayEnabled": false
+}
+```
+
+### `GET /machine`
+
+Live machine state. Values are decimal strings so JavaScript clients do not lose
+precision. USD values use 6 decimals; `fee` is in wei (MON).
+
+```json
+{
+  "network": "mainnet",
+  "chainId": 143,
+  "canPull": true,
+  "pullPrice": "1000000",
+  "inventoryValueUsd6": "20000000",
+  "reservedValueUsd6": "0",
+  "fee": "1480000000000000000",
+  "totalPulls": "42",
+  "paused": false
+}
+```
+
+If `CLAW_MACHINE_ADDRESS` is unset or a read fails, the endpoint returns safe
+defaults (`canPull: false`, zero values) instead of crashing.
+
+### `GET /pulls?limit=20`
+
+Recently indexed pulls, newest first. `limit` is clamped to 1–100 (default 20).
+
+```json
+[
+  {
+    "id": 7,
+    "pullId": "7",
+    "player": "0x1234...",
+    "sequenceNumber": "18446744073709551615",
+    "feePaid": "1480000000000000000",
+    "txHash": "0xabc...",
+    "blockNumber": "1234567",
+    "timestamp": 1760000000,
+    "resolved": true,
+    "legendary": false,
+    "stocks": ["0x8ad3c73f833d3f9a523ab01476625f269aeb7cf0"],
+    "amounts": ["2692000000000000000"],
+    "valueUsd6": "730000",
+    "randomNumber": "0x...",
+    "resolvedTxHash": "0xdef...",
+    "resolvedBlockNumber": "1234568",
+    "resolvedTimestamp": 1760000002,
+    "refunded": false
+  }
+]
+```
+
+### `GET /pulls/:id`
+
+One indexed pull by id (ids start at 1). Returns `404` if the id has not been
+indexed. Same shape as an entry from `GET /pulls`.
+
+### `GET /players/:address/pulls`
+
+All indexed pulls for a player plus aggregate stats. Refunded pulls are counted
+in `totalPulls` and `refundedCount` but excluded from prize counts and value.
+
+```json
+{
+  "address": "0x1234...",
+  "totalPulls": 10,
+  "legendaryCount": 1,
+  "commonCount": 8,
+  "refundedCount": 1,
+  "totalValue": "10.73",
+  "totalValueUsd6": "10730000",
+  "pulls": []
+}
+```
+
+### `GET /leaderboard?limit=100`
+
+Players ranked by total `valueUsd6` paid out. `limit` is clamped to 1–500.
+
+```json
+[
+  {
+    "player": "0x1234...",
+    "totalPulls": 50,
+    "legendaryCount": 2,
+    "totalValue": "17.3",
+    "totalValueUsd6": "17300000"
+  }
+]
+```
+
+### `POST /relay`
+
+Only available when `RELAY_ENABLED=true`; otherwise returns `503`.
 
 **Request:**
+
 ```json
 {
   "signedTx": "0x02f8..."
 }
 ```
 
-**Response (Success):**
+**Success:**
+
 ```json
 {
   "txHash": "0x123...",
   "status": "success",
-  "pullId": "0x1"
+  "pullId": "7"
 }
 ```
 
-**Response (Error):**
-```json
-{
-  "txHash": "0x123...",
-  "status": "reverted",
-  "error": "Rate limited: please wait 2s"
-}
-```
+**Validation rules:**
 
-**Validation Rules:**
-- ✅ Chain ID must be 143 (Monad)
-- ✅ Recipient must be ClawMachine contract address
-- ✅ Function selector must match `pull(bytes32, bytes[])`
-- ✅ Calldata must decode to valid `pull()` arguments with `priceUpdateData`
-- ✅ Gas limit must be ≤ 500,000
-- ✅ Value must be ≥ `getTotalFee(priceUpdateData)` (Pyth fee + Entropy fee)
-- ✅ Rate limit: 1 pull per address every 3 seconds
-- ✅ Duplicate transaction detection
+- Chain id matches `NETWORK` (`143` or `10143`).
+- `to` equals `CLAW_MACHINE_ADDRESS`.
+- Selector is `pull()` (no calldata arguments).
+- Gas limit is at most `MAX_GAS_LIMIT`.
+- `msg.value >= getFee()` (read live from the contract).
+- One relayed pull per address every `RATE_LIMIT_WINDOW_MS`.
+- Duplicate signed transactions are rejected.
 
-### GET /machine
+The relay never signs, never holds keys, and never pays gas.
 
-Get current machine status.
+### `WS /events`
 
-**Response:**
-```json
-{
-  "canPull": true,
-  "pullPrice": "1000000",
-  "inventoryValue": "20000000",
-  "pendingReservations": "10000000",
-  "entropyFee": "10000000000000000"
-}
-```
-
-### GET /price-update
-
-Fetch Pyth price update data from Hermes API, plus the total fee required for the pull transaction.
-
-**Query Parameters:**
-- `symbols` (optional): Comma-separated list of symbols (default: `TSLAx,NVDAx,AAPLx,SPYx`)
-
-**Example:**
-```
-GET /price-update?symbols=TSLAx,NVDAx
-```
-
-**Response:**
-```json
-{
-  "priceUpdateData": ["0x504e41550100000003b801000000030d01..."],
-  "fee": "150000000000000"
-}
-```
-
-**Notes:**
-- `priceUpdateData` contains signed price proofs from Pyth oracle
-- `fee` is the total fee from `getTotalFee(priceUpdateData)` (Pyth fee + Entropy fee in wei)
-- Frontend must include this `priceUpdateData` in the `pull()` transaction
-- Frontend must send at least `fee` amount as transaction value
-
-### GET /pulls/:id
-
-Get pull details by pullId.
-
-**Response:**
-```json
-{
-  "id": 1,
-  "pullId": "1",
-  "player": "0x123...",
-  "sequenceNumber": "42",
-  "txHash": "0xabc...",
-  "blockNumber": "1000",
-  "timestamp": 1699000000,
-  "resolved": true,
-  "legendary": false,
-  "stocks": ["0x8ad3c73f833d3f9a523ab01476625f269aeb7cf0"],
-  "amounts": ["730000"]
-}
-```
-
-### GET /players/:address/pulls
-
-Get all pulls for a player address.
-
-**Response:**
-```json
-{
-  "address": "0x123...",
-  "totalPulls": 10,
-  "legendaryCount": 0,
-  "commonCount": 10,
-  "totalValue": "7.3",
-  "pulls": [...]
-}
-```
-
-### GET /leaderboard
-
-Get top players by total value won.
-
-**Query Parameters:**
-- `limit` (optional): Number of entries (default: 100)
-
-**Response:**
-```json
-[
-  {
-    "player": "0x123...",
-    "totalPulls": 50,
-    "legendaryCount": 1,
-    "totalValue": "17.3"
-  }
-]
-```
-
-### WebSocket /events
-
-Real-time event stream for pull updates.
-
-**Connection:**
 ```javascript
 const ws = new WebSocket('ws://localhost:3000/events');
-
 ws.onmessage = (event) => {
-  const data = JSON.parse(event.data);
-  console.log(data.type); // 'PullRequested' or 'PullResolved'
+  const message = JSON.parse(event.data);
+  console.log(message.type); // PullRequested | PullResolved | PullRefunded
 };
 ```
 
-**Event Types:**
+`PullRequested`:
 
-**PullRequested:**
 ```json
 {
   "type": "PullRequested",
-  "pullId": "1",
-  "player": "0x123...",
+  "pullId": "7",
+  "player": "0x1234...",
   "data": {
     "sequenceNumber": "42",
-    "txHash": "0xabc..."
+    "feePaid": "1480000000000000000",
+    "txHash": "0xabc...",
+    "blockNumber": "1234567"
   }
 }
 ```
 
-**PullResolved:**
+`PullResolved`:
+
 ```json
 {
   "type": "PullResolved",
-  "pullId": "1",
-  "player": "0x123...",
+  "pullId": "7",
+  "player": "0x1234...",
   "data": {
     "legendary": false,
-    "stocks": ["0x8ad3c73f833d3f9a523ab01476625f269aeb7cf0"],
-    "amounts": ["730000"],
-    "txHash": "0xdef..."
+    "stocks": ["0x8ad3..."],
+    "amounts": ["2692000000000000000"],
+    "valueUsd6": "730000",
+    "randomNumber": "0x...",
+    "txHash": "0xdef...",
+    "blockNumber": "1234568"
   }
 }
 ```
 
-## Frontend Integration
+`PullRefunded`:
 
-### Signing Transactions (Without Broadcasting)
+```json
+{
+  "type": "PullRefunded",
+  "pullId": "7",
+  "player": "0x1234...",
+  "data": {
+    "amount": "1000000",
+    "txHash": "0x...",
+    "blockNumber": "1234599"
+  }
+}
+```
 
-The frontend must sign transactions without broadcasting them to the network. Here's how:
+## Frontend integration
 
-#### Using Viem with Local/Embedded Account
+The frontend should use the same ABI as `src/abi/ClawMachine.ts` and the address
+from `.env`. A pull is a single transaction:
+
+1. Read `getFee()` and `pullPrice`.
+2. Approve `pullPrice` USDC for the ClawMachine (or use an existing allowance).
+3. Send `pull()` with `value = getFee()`. The contract refunds excess MON.
 
 ```typescript
-import { createWalletClient, http, parseEther } from 'viem';
-import { privateKeyToAccount } from 'viem/accounts';
-import { monad } from './config'; // Chain definition from backend/src/config.ts
+import { encodeFunctionData } from 'viem';
 
-// Create account from private key (or from mnemonic, etc.)
-const account = privateKeyToAccount('0x...');
-
-const walletClient = createWalletClient({
-  account,
-  chain: monad,
-  transport: http('https://rpc.monad.xyz'),
+const fee = await publicClient.readContract({
+  address: clawMachine,
+  abi: ClawMachineABI,
+  functionName: 'getFee',
 });
 
-// Fetch Pyth price updates first
-const priceUpdateResponse = await fetch('http://localhost:3000/price-update');
-const { priceUpdateData, fee } = await priceUpdateResponse.json();
+// USDC.approve(clawMachine, pullPrice) must happen first.
+const hash = await walletClient.writeContract({
+  address: clawMachine,
+  abi: ClawMachineABI,
+  functionName: 'pull',
+  value: fee,
+});
+```
 
-// Sign transaction WITHOUT broadcasting
+Find the pull id in the `PullRequested` log of the receipt, then poll
+`getPull(pullId)` until `status == 2` (Resolved) and read `getPullPayout(pullId)`.
+The REST API and `/events` feed are convenience layers; the on-chain views are
+the source of truth.
+
+### Using the optional relay
+
+If `RELAY_ENABLED=true`, sign the transaction without broadcasting and POST it:
+
+```typescript
 const signedTx = await account.signTransaction({
-  to: CLAW_MACHINE_ADDRESS,
-  value: BigInt(fee), // Total fee (Pyth + Entropy)
-  data: encodeFunctionData({
-    abi: ClawMachineABI,
-    functionName: 'pull',
-    args: [
-      userRandomBytes32,
-      priceUpdateData, // Include Pyth price update data
-    ],
-  }),
+  to: clawMachine,
+  value: fee,
+  data: encodeFunctionData({ abi: ClawMachineABI, functionName: 'pull' }),
   chainId: 143,
-  nonce: await walletClient.getTransactionCount({ address: account.address }),
-  gas: 300000n,
+  nonce: await publicClient.getTransactionCount({ address: account.address }),
+  gas: 200_000n,
   maxFeePerGas: parseGwei('10'),
   maxPriorityFeePerGas: parseGwei('1'),
 });
 
-// Send to backend
-const response = await fetch('http://localhost:3000/relay', {
+await fetch('http://localhost:3000/relay', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({ signedTx }),
 });
-
-const result = await response.json();
-console.log('Pull tx hash:', result.txHash);
-console.log('Pull ID:', result.pullId);
 ```
 
-#### Complete Frontend Flow
+## Indexer details
 
-```typescript
-import { encodeFunctionData, parseEther } from 'viem';
-import { privateKeyToAccount } from 'viem/accounts';
+Monad's public RPC restricts `eth_getLogs` block ranges, so the indexer never
+scans the chain in one request. It pages through `INDEXER_BLOCK_RANGE` blocks at
+a time (default 100), polling every `INDEXER_POLL_INTERVAL_MS` milliseconds.
 
-async function executePull(userAccount: ReturnType<typeof privateKeyToAccount>) {
-  // 1. Check machine status
-  const machineStatus = await fetch('http://localhost:3000/machine').then(r => r.json());
-  
-  if (!machineStatus.canPull) {
-    throw new Error('Machine is currently refilling');
-  }
-  
-  // 2. Fetch Pyth price update data
-  const priceUpdate = await fetch('http://localhost:3000/price-update').then(r => r.json());
-  const { priceUpdateData, fee } = priceUpdate;
-  
-  // 3. Generate user randomness
-  const userRandom = `0x${crypto.getRandomValues(new Uint8Array(32))
-    .reduce((s, b) => s + b.toString(16).padStart(2, '0'), '')}`;
-  
-  // 4. Build and sign transaction
-  const nonce = await walletClient.getTransactionCount({ 
-    address: userAccount.address 
-  });
-  
-  const signedTx = await userAccount.signTransaction({
-    to: CLAW_MACHINE_ADDRESS,
-    value: BigInt(fee), // Total fee (Pyth + Entropy)
-    data: encodeFunctionData({
-      abi: ClawMachineABI,
-      functionName: 'pull',
-      args: [
-        userRandom as `0x${string}`,
-        priceUpdateData, // Pyth price update data
-      ],
-    }),
-    chainId: 143,
-    nonce,
-    gas: 300000n,
-    maxFeePerGas: parseEther('0.00001'),
-    maxPriorityFeePerGas: parseEther('0.000001'),
-  });
-  
-  // 5. Submit to backend relay
-  const response = await fetch('http://localhost:3000/relay', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ signedTx }),
-  });
-  
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || 'Transaction failed');
-  }
-  
-  const result = await response.json();
-  return result; // { txHash, status, pullId }
-}
-```
+- The last fully processed block is stored in SQLite (`indexer_state`).
+- Restarts resume from the checkpoint; replayed ranges are idempotent
+  (`INSERT OR IGNORE` plus upserts).
+- If `START_BLOCK` is unset and no checkpoint exists, indexing starts at the
+  current head.
+- `PullRefunded` marks the pull as refunded without counting it as a prize.
+- If `PullResolved` is seen without a matching `PullRequested` (for example,
+  because `START_BLOCK` starts after the request), a minimal row is created so
+  the resolution is still queryable.
 
-#### MetaMask Limitation
+If the RPC still rejects a range, lower `INDEXER_BLOCK_RANGE` (for example to
+`50`) and restart.
 
-**Important:** MetaMask does NOT support signing transactions without broadcasting via the standard `eth_sendTransaction` RPC method. You have two options:
+## Monad-specific notes
 
-1. **Use embedded wallets** (viem local accounts, ethers.js Wallet, etc.) for signing
-2. **Let MetaMask broadcast directly** and skip the backend relay (not recommended for this architecture)
+- Gas is charged on the gas **limit**, not gas used. The relay caps gas with
+  `MAX_GAS_LIMIT`; clients should estimate and add a small buffer.
+- `eth_getLogs` ranges are limited; see the indexer section above.
+- Blocks are fast (~0.4s), so the default 3s poll is responsive enough for
+  REST and WebSocket consumers.
+- The backend reads state through contract views (`getPull`, `getRecentPulls`,
+  `getPullPayout`) rather than log scans wherever possible.
 
-If using MetaMask, you'll need to implement a different flow where MetaMask broadcasts directly to Monad RPC, and the backend only indexes events (no relay validation).
-
-## Monad-Specific Considerations
-
-### eth_sendRawTransactionSync
-
-Monad supports a synchronous variant of `eth_sendRawTransaction` for faster confirmation. The backend attempts to use it first, then falls back to the standard method:
-
-```typescript
-try {
-  txHash = await publicClient.request({
-    method: 'eth_sendRawTransactionSync',
-    params: [signedTx],
-  });
-} catch {
-  txHash = await publicClient.sendRawTransaction({ serializedTransaction: signedTx });
-}
-```
-
-### Event Indexing Range Limits
-
-Monad has `eth_getLogs` range limits. The indexer automatically chunks requests into 1000-block ranges:
-
-```typescript
-const BLOCK_RANGE_LIMIT = 1000;
-```
-
-### Gas Costs
-
-- Monad charges by gas **limit**, not usage
-- Cold storage access: 10,100 gas (vs 2,100 on Ethereum)
-- Set realistic gas limits to avoid overpaying
-
-## Project Structure
+## Project structure
 
 ```
 backend/
 ├── src/
 │   ├── abi/
-│   │   └── ClawMachine.ts        # Contract ABI (temporary, to be regenerated)
+│   │   └── ClawMachine.ts        # Audited contract ABI (as const)
 │   ├── db/
-│   │   └── index.ts              # SQLite database operations
+│   │   └── index.ts              # SQLite schema, migrations, queries
 │   ├── routes/
-│   │   └── index.ts              # API routes
+│   │   └── index.ts              # Hono REST routes
 │   ├── services/
-│   │   ├── contract.ts           # Contract read operations
-│   │   ├── indexer.ts            # Event indexer
-│   │   ├── pyth.ts               # Pyth price feed integration
-│   │   ├── relay.ts              # Transaction validation & relay
-│   │   └── websocket.ts          # WebSocket server
+│   │   ├── contract.ts           # Machine status reads
+│   │   ├── indexer.ts            # Paged event indexer
+│   │   ├── relay.ts              # Optional transaction validation/relay
+│   │   └── websocket.ts          # WebSocket broadcast
 │   ├── types/
-│   │   └── index.ts              # TypeScript types
+│   │   └── index.ts              # Shared TypeScript types
 │   ├── utils/
-│   │   └── rateLimiter.ts        # Rate limiting & deduplication
-│   ├── config.ts                 # Configuration & viem clients
+│   │   └── rateLimiter.ts        # Relay rate limiting and dedup
+│   ├── config.ts                 # Network config and viem client
 │   └── index.ts                  # Server entry point
-├── .env.example                  # Environment variables template
-├── package.json
-├── tsconfig.json
+├── .env.example
 ├── vitest.config.ts
-└── README.md
+└── package.json
 ```
-
-## Important Notes
-
-### Contract ABI
-
-The `backend/src/abi/ClawMachine.ts` file is **synced with the actual contract** from PR #21 (`contracts/src/ClawMachine.sol`).
-
-**Key contract features:**
-- `pull(bytes32 userRandomNumber, bytes[] priceUpdateData)` - Pull function with Pyth price updates
-- `getTotalFee(bytes[])` - Returns Pyth fee + Entropy fee
-- `getPythFee(bytes[])`, `getEntropyFee()` - Individual fee queries
-- Pyth oracle integration at `0xB754BA51E3861Ac0Cb67f73CD046dE790A36508d`
-- Price snapshots at pull request time for consistent callback execution
-
-**After contract deployment:**
-1. Set `CLAW_MACHINE_ADDRESS` in `.env` to the deployed contract address
-2. Verify `PYTH_PRICE_FEED_ADDRESS` matches the contract's Pyth oracle (default: `0xB754BA51E3861Ac0Cb67f73CD046dE790A36508d`)
-
-### Dependencies on Contract
-
-The following features require the contract to be deployed and address configured:
-
-- ✅ Transaction relay validation (works without contract)
-- ❌ `/machine` endpoint (requires contract deployment)
-- ✅ `/price-update` endpoint (works independently)
-- ❌ Event indexer (requires contract deployment)
-- ❌ Pull history endpoints (require indexed events)
-
-The backend is designed to gracefully handle a missing contract:
-- `/machine` returns default/zero values with try/catch
-- Indexer logs errors but doesn't crash
-
-## Rate Limiting
-
-- **Per-address rate limit:** 1 pull every 3 seconds
-- **In-memory deduplication:** Prevents duplicate transaction submissions
-- Duplicate entries auto-expire after 5 minutes
 
 ## Testing
 
-Tests validate transaction relay logic:
-
 ```bash
 npm test
+npm run typecheck
 ```
 
-Test coverage:
-- ✅ Wrong chain ID rejection
-- ✅ Wrong recipient address rejection
-- ✅ Wrong function selector rejection
-- ✅ Gas limit validation
-- ✅ Zero value rejection
-- ✅ Insufficient value rejection (value < getTotalFee)
-- ✅ Valid transaction acceptance
-
-Tests use mock accounts and do not require a live Monad connection.
+The relay tests sign transactions with a well-known test key and mock the RPC;
+no network connection or real funds are required. They cover chain id, recipient,
+selector, gas limit, zero/insufficient value, unreadable `getFee()`, a valid
+pull, and the disabled-by-default `/relay` route.
 
 ## Deployment
 
-1. Set up environment:
-   ```bash
-   cp .env.example .env
-   # Edit .env with production values
+1. Deploy the contracts with the team's Foundry script (`--broadcast`).
+2. Copy the deployed `ClawMachine` address and deployment block from the
+   broadcast output.
+3. Configure `.env`:
+   ```env
+   NETWORK=mainnet
+   CLAW_MACHINE_ADDRESS=0x...
+   START_BLOCK=...
    ```
-
-2. Build:
+4. Build and run:
    ```bash
    npm run build
-   ```
-
-3. Run:
-   ```bash
    npm start
    ```
-
-4. For production, use a process manager like PM2:
+5. For a long-running process, use a process manager (for example PM2):
    ```bash
-   npm install -g pm2
    pm2 start dist/index.js --name xstocks-backend
    ```
 

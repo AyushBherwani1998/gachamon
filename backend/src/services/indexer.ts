@@ -1,225 +1,326 @@
-import { wsClient, publicClient, config } from '../config.js';
-import { ClawMachineABI } from '../abi/ClawMachine.js';
-import { insertPull, updatePullResolved, getLastBlock, setLastBlock } from '../db/index.js';
+import { parseAbiItem } from 'viem';
+import { config, publicClient } from '../config.js';
+import {
+  getLastBlock,
+  insertPull,
+  markPullRefunded,
+  setLastBlock,
+  updatePullResolved,
+} from '../db/index.js';
 import { broadcastEvent } from './websocket.js';
 
-const BLOCK_RANGE_LIMIT = 1000; // Monad has eth_getLogs range limits
+const pullRequestedEvent = parseAbiItem(
+  'event PullRequested(uint256 indexed pullId, address indexed player, uint64 sequenceNumber, uint256 feePaid)',
+);
+const pullResolvedEvent = parseAbiItem(
+  'event PullResolved(uint256 indexed pullId, address indexed player, bool legendary, address[] stocks, uint256[] amounts, uint256 valueUsd6, bytes32 randomNumber)',
+);
+const pullRefundedEvent = parseAbiItem(
+  'event PullRefunded(uint256 indexed pullId, address indexed player, uint256 amount)',
+);
 
-export async function startIndexer() {
-  console.log('Starting indexer...');
-  
-  // Backfill from last processed block
-  await backfillEvents();
-  
-  // Watch for new events
-  watchEvents();
+const RETRY_ATTEMPTS = 3;
+
+let pollTimer: ReturnType<typeof setInterval> | null = null;
+let syncing = false;
+let started = false;
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function backfillEvents() {
-  try {
-    const currentBlock = await publicClient.getBlockNumber();
-    let lastBlock = getLastBlock();
-    
-    if (!lastBlock) {
-      // Start from 1000 blocks ago if no last block
-      lastBlock = currentBlock - 1000n > 0n ? currentBlock - 1000n : 0n;
-      setLastBlock(lastBlock);
+async function withRetry<T>(label: string, fn: () => Promise<T>): Promise<T> {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt < RETRY_ATTEMPTS; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+      if (attempt < RETRY_ATTEMPTS - 1) {
+        await sleep(500 * (attempt + 1));
+      }
     }
-    
-    console.log(`Backfilling events from block ${lastBlock} to ${currentBlock}`);
-    
-    // Process in chunks to respect range limits
-    let fromBlock = lastBlock + 1n;
-    
-    while (fromBlock <= currentBlock) {
-      const toBlock = fromBlock + BigInt(BLOCK_RANGE_LIMIT) - 1n < currentBlock
-        ? fromBlock + BigInt(BLOCK_RANGE_LIMIT) - 1n
-        : currentBlock;
-      
-      console.log(`Fetching logs from ${fromBlock} to ${toBlock}`);
-      
-      // Fetch PullRequested events
-      const pullRequestedLogs = await publicClient.getLogs({
-        address: config.clawMachineAddress,
-        event: {
-          type: 'event',
-          name: 'PullRequested',
-          inputs: [
-            { name: 'pullId', type: 'uint256', indexed: true },
-            { name: 'player', type: 'address', indexed: true },
-            { name: 'sequenceNumber', type: 'uint64', indexed: false },
-            { name: 'pullPrice', type: 'uint256', indexed: false },
-          ],
-        },
+  }
+
+  throw new Error(
+    `${label} failed after ${RETRY_ATTEMPTS} attempts: ${
+      lastError instanceof Error ? lastError.message : String(lastError)
+    }`,
+  );
+}
+
+async function getTimestamps(blockNumbers: Iterable<bigint>): Promise<Map<bigint, number>> {
+  const unique = [...new Set(blockNumbers)];
+  const timestamps = new Map<bigint, number>();
+
+  await Promise.all(
+    unique.map(async (blockNumber) => {
+      const block = await withRetry(`eth_getBlockByNumber(${blockNumber})`, () =>
+        publicClient.getBlock({ blockNumber }),
+      );
+      timestamps.set(blockNumber, Number(block.timestamp));
+    }),
+  );
+
+  return timestamps;
+}
+
+async function indexRange(fromBlock: bigint, toBlock: bigint): Promise<void> {
+  const address = config.clawMachineAddress;
+
+  const [requestedLogs, resolvedLogs, refundedLogs] = await Promise.all([
+    withRetry('PullRequested logs', () =>
+      publicClient.getLogs({
+        address,
+        event: pullRequestedEvent,
         fromBlock,
         toBlock,
-      }).catch((err) => {
-        console.error('Error fetching PullRequested logs:', err);
-        return [];
-      });
-      
-      for (const log of pullRequestedLogs) {
-        try {
-          const block = await publicClient.getBlock({ blockNumber: log.blockNumber });
-          
-          insertPull({
-            pullId: log.topics[1] as string,
-            player: `0x${log.topics[2]?.slice(26)}` as string,
-            sequenceNumber: log.data as string,
-            txHash: log.transactionHash as string,
-            blockNumber: log.blockNumber.toString(),
-            timestamp: Number(block.timestamp),
-          });
-          
-          console.log(`Indexed PullRequested: pullId=${log.topics[1]}`);
-        } catch (error) {
-          console.error('Error processing PullRequested log:', error);
-        }
-      }
-      
-      // Fetch PullResolved events
-      const pullResolvedLogs = await publicClient.getLogs({
-        address: config.clawMachineAddress,
-        event: {
-          type: 'event',
-          name: 'PullResolved',
-          inputs: [
-            { name: 'pullId', type: 'uint256', indexed: true },
-            { name: 'player', type: 'address', indexed: true },
-            { name: 'legendary', type: 'bool', indexed: false },
-            { name: 'stocks', type: 'address[]', indexed: false },
-            { name: 'amounts', type: 'uint256[]', indexed: false },
-          ],
-        },
+      }),
+    ),
+    withRetry('PullResolved logs', () =>
+      publicClient.getLogs({
+        address,
+        event: pullResolvedEvent,
         fromBlock,
         toBlock,
-      }).catch((err) => {
-        console.error('Error fetching PullResolved logs:', err);
-        return [];
+      }),
+    ),
+    withRetry('PullRefunded logs', () =>
+      publicClient.getLogs({
+        address,
+        event: pullRefundedEvent,
+        fromBlock,
+        toBlock,
+      }),
+    ),
+  ]);
+
+  const blockNumbers = [
+    ...requestedLogs.map((log) => log.blockNumber),
+    ...resolvedLogs.map((log) => log.blockNumber),
+    ...refundedLogs.map((log) => log.blockNumber),
+  ];
+  const timestamps = await getTimestamps(blockNumbers);
+
+  for (const log of requestedLogs) {
+    try {
+      const { pullId, player, sequenceNumber, feePaid } = log.args;
+      if (pullId === undefined || player === undefined) continue;
+
+      const blockNumber = log.blockNumber;
+      const timestamp = timestamps.get(blockNumber) ?? Math.floor(Date.now() / 1000);
+      const id = pullId.toString();
+
+      insertPull({
+        pullId: id,
+        player,
+        sequenceNumber: (sequenceNumber ?? 0n).toString(),
+        feePaid: feePaid?.toString(),
+        txHash: log.transactionHash,
+        blockNumber: blockNumber.toString(),
+        timestamp,
       });
-      
-      for (const log of pullResolvedLogs) {
-        try {
-          const block = await publicClient.getBlock({ blockNumber: log.blockNumber });
-          
-          // Decode event data
-          // This is simplified; in production you'd use proper ABI decoding
-          const pullId = log.topics[1] as string;
-          
-          updatePullResolved({
-            pullId,
-            legendary: false, // Would decode from log.data
-            stocks: [], // Would decode from log.data
-            amounts: [], // Would decode from log.data
-            txHash: log.transactionHash as string,
-            blockNumber: log.blockNumber.toString(),
-            timestamp: Number(block.timestamp),
-          });
-          
-          console.log(`Indexed PullResolved: pullId=${pullId}`);
-        } catch (error) {
-          console.error('Error processing PullResolved log:', error);
-        }
-      }
-      
-      setLastBlock(toBlock);
-      fromBlock = toBlock + 1n;
+
+      broadcastEvent({
+        type: 'PullRequested',
+        pullId: id,
+        player,
+        data: {
+          sequenceNumber: (sequenceNumber ?? 0n).toString(),
+          feePaid: (feePaid ?? 0n).toString(),
+          txHash: log.transactionHash,
+          blockNumber: blockNumber.toString(),
+        },
+      });
+    } catch (error) {
+      console.error('Error processing PullRequested log:', error);
     }
-    
-    console.log(`Backfill complete. Last block: ${currentBlock}`);
-  } catch (error) {
-    console.error('Error in backfill:', error);
+  }
+
+  for (const log of resolvedLogs) {
+    try {
+      const { pullId, player, legendary, stocks, amounts, valueUsd6, randomNumber } = log.args;
+      if (pullId === undefined || player === undefined) continue;
+
+      const blockNumber = log.blockNumber;
+      const timestamp = timestamps.get(blockNumber) ?? Math.floor(Date.now() / 1000);
+      const id = pullId.toString();
+      const resolved = {
+        pullId: id,
+        legendary: Boolean(legendary),
+        stocks: [...(stocks ?? [])],
+        amounts: [...(amounts ?? [])].map((amount) => amount.toString()),
+        valueUsd6: (valueUsd6 ?? 0n).toString(),
+        randomNumber: randomNumber ?? '0x',
+        txHash: log.transactionHash,
+        blockNumber: blockNumber.toString(),
+        timestamp,
+      };
+
+      let result = updatePullResolved(resolved);
+      if (result.changes === 0) {
+        // The request event may predate START_BLOCK or the local database.
+        insertPull({
+          pullId: id,
+          player,
+          sequenceNumber: '0',
+          txHash: log.transactionHash,
+          blockNumber: blockNumber.toString(),
+          timestamp,
+        });
+        result = updatePullResolved(resolved);
+      }
+
+      broadcastEvent({
+        type: 'PullResolved',
+        pullId: id,
+        player,
+        data: {
+          legendary: resolved.legendary,
+          stocks: resolved.stocks,
+          amounts: resolved.amounts,
+          valueUsd6: resolved.valueUsd6,
+          randomNumber: resolved.randomNumber,
+          txHash: log.transactionHash,
+          blockNumber: blockNumber.toString(),
+        },
+      });
+    } catch (error) {
+      console.error('Error processing PullResolved log:', error);
+    }
+  }
+
+  for (const log of refundedLogs) {
+    try {
+      const { pullId, player, amount } = log.args;
+      if (pullId === undefined || player === undefined) continue;
+
+      const blockNumber = log.blockNumber;
+      const timestamp = timestamps.get(blockNumber) ?? Math.floor(Date.now() / 1000);
+      const id = pullId.toString();
+      const refund = {
+        pullId: id,
+        amount: (amount ?? 0n).toString(),
+        txHash: log.transactionHash,
+        blockNumber: blockNumber.toString(),
+        timestamp,
+      };
+
+      let result = markPullRefunded(refund);
+      if (result.changes === 0) {
+        insertPull({
+          pullId: id,
+          player,
+          sequenceNumber: '0',
+          txHash: log.transactionHash,
+          blockNumber: blockNumber.toString(),
+          timestamp,
+        });
+        result = markPullRefunded(refund);
+      }
+
+      broadcastEvent({
+        type: 'PullRefunded',
+        pullId: id,
+        player,
+        data: {
+          amount: refund.amount,
+          txHash: log.transactionHash,
+          blockNumber: blockNumber.toString(),
+        },
+      });
+    } catch (error) {
+      console.error('Error processing PullRefunded log:', error);
+    }
   }
 }
 
-function watchEvents() {
-  console.log('Watching for new events...');
-  
-  // Watch PullRequested
-  wsClient.watchContractEvent({
-    address: config.clawMachineAddress,
-    abi: ClawMachineABI,
-    eventName: 'PullRequested',
-    onLogs: async (logs) => {
-      for (const log of logs) {
-        try {
-          const block = await publicClient.getBlock({ blockNumber: log.blockNumber });
-          
-          const pullId = log.topics[1] as string;
-          const player = `0x${log.topics[2]?.slice(26)}` as string;
-          
-          insertPull({
-            pullId,
-            player,
-            sequenceNumber: log.args.sequenceNumber?.toString() || '0',
-            txHash: log.transactionHash as string,
-            blockNumber: log.blockNumber.toString(),
-            timestamp: Number(block.timestamp),
-          });
-          
-          console.log(`New PullRequested: pullId=${pullId}, player=${player}`);
-          
-          broadcastEvent({
-            type: 'PullRequested',
-            pullId,
-            player,
-            data: {
-              sequenceNumber: log.args.sequenceNumber?.toString(),
-              txHash: log.transactionHash,
-            },
-          });
-          
-          setLastBlock(log.blockNumber);
-        } catch (error) {
-          console.error('Error processing PullRequested event:', error);
-        }
-      }
-    },
-  });
-  
-  // Watch PullResolved
-  wsClient.watchContractEvent({
-    address: config.clawMachineAddress,
-    abi: ClawMachineABI,
-    eventName: 'PullResolved',
-    onLogs: async (logs) => {
-      for (const log of logs) {
-        try {
-          const block = await publicClient.getBlock({ blockNumber: log.blockNumber });
-          
-          const pullId = log.topics[1] as string;
-          const player = `0x${log.topics[2]?.slice(26)}` as string;
-          const { legendary, stocks, amounts } = log.args;
-          
-          updatePullResolved({
-            pullId,
-            legendary: legendary as boolean,
-            stocks: stocks as string[],
-            amounts: (amounts as bigint[]).map(a => a.toString()),
-            txHash: log.transactionHash as string,
-            blockNumber: log.blockNumber.toString(),
-            timestamp: Number(block.timestamp),
-          });
-          
-          console.log(`New PullResolved: pullId=${pullId}, legendary=${legendary}`);
-          
-          broadcastEvent({
-            type: 'PullResolved',
-            pullId,
-            player,
-            data: {
-              legendary,
-              stocks,
-              amounts: (amounts as bigint[]).map(a => a.toString()),
-              txHash: log.transactionHash,
-            },
-          });
-          
-          setLastBlock(log.blockNumber);
-        } catch (error) {
-          console.error('Error processing PullResolved event:', error);
-        }
-      }
-    },
-  });
+function nextFromBlock(head: bigint): bigint {
+  const checkpoint = getLastBlock();
+
+  if (checkpoint !== null) {
+    const next = checkpoint + 1n;
+    return next > config.startBlock ? next : config.startBlock;
+  }
+
+  // Without START_BLOCK, index live from the current head instead of walking
+  // the whole chain through a rate-limited public RPC.
+  return config.startBlockConfigured ? config.startBlock : head;
+}
+
+/**
+ * Fetch and index every block up to the current head.
+ * Safe to call repeatedly; already-indexed ranges resume from the checkpoint.
+ */
+export async function syncToHead(): Promise<void> {
+  if (!config.isClawMachineConfigured) {
+    return;
+  }
+
+  const head = await publicClient.getBlockNumber();
+  let fromBlock = nextFromBlock(head);
+
+  if (fromBlock > head) {
+    return;
+  }
+
+  const range = BigInt(config.indexerBlockRange);
+  console.log(`Indexing ClawMachine logs from block ${fromBlock} to ${head}`);
+
+  while (fromBlock <= head) {
+    const toBlock = fromBlock + range - 1n < head ? fromBlock + range - 1n : head;
+
+    await indexRange(fromBlock, toBlock);
+    setLastBlock(toBlock);
+
+    fromBlock = toBlock + 1n;
+  }
+}
+
+async function runOnce(): Promise<void> {
+  if (syncing) return;
+  syncing = true;
+
+  try {
+    await syncToHead();
+  } catch (error) {
+    console.error('Indexer error:', error);
+  } finally {
+    syncing = false;
+  }
+}
+
+export async function startIndexer(): Promise<void> {
+  if (started) return;
+  started = true;
+
+  if (!config.isClawMachineConfigured) {
+    console.warn('CLAW_MACHINE_ADDRESS is not set; indexer is disabled.');
+    return;
+  }
+
+  if (!config.startBlockConfigured && getLastBlock() === null) {
+    console.warn(
+      'START_BLOCK is not set; indexing only new blocks. Set START_BLOCK to the deployment block to backfill history.',
+    );
+  }
+
+  console.log(
+    `Starting indexer (chain ${config.chainId}, ${config.indexerBlockRange}-block pages, ${config.indexerPollIntervalMs}ms poll)`,
+  );
+
+  await runOnce();
+
+  pollTimer = setInterval(() => {
+    void runOnce();
+  }, config.indexerPollIntervalMs);
+}
+
+export function stopIndexer(): void {
+  if (pollTimer !== null) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+  started = false;
 }

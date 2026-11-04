@@ -1,50 +1,84 @@
-import { publicClient, config } from '../config.js';
+import { config, publicClient } from '../config.js';
 import { ClawMachineABI } from '../abi/ClawMachine.js';
 import { MachineStatus } from '../types/index.js';
 
 export async function getMachineStatus(): Promise<MachineStatus> {
+  const defaults: MachineStatus = {
+    network: config.network,
+    chainId: config.chainId,
+    canPull: false,
+    pullPrice: '0',
+    inventoryValueUsd6: '0',
+    reservedValueUsd6: '0',
+    fee: '0',
+    totalPulls: '0',
+    paused: true,
+  };
+
+  if (!config.isClawMachineConfigured) {
+    return defaults;
+  }
+
   try {
-    const [canPull, entropyFee, inventoryValue, pendingReservations] = await Promise.all([
+    const [
+      canPull,
+      pullPrice,
+      inventoryValueUsd6,
+      reservedValueUsd6,
+      fee,
+      totalPulls,
+      paused,
+    ] = await Promise.all([
       publicClient.readContract({
         address: config.clawMachineAddress,
         abi: ClawMachineABI,
         functionName: 'canPull',
-      }).catch(() => false),
-      
+      }),
       publicClient.readContract({
         address: config.clawMachineAddress,
         abi: ClawMachineABI,
-        functionName: 'getEntropyFee',
-      }).catch(() => 0n),
-      
+        functionName: 'pullPrice',
+      }),
       publicClient.readContract({
         address: config.clawMachineAddress,
         abi: ClawMachineABI,
-        functionName: 'getInventoryValue',
-      }).catch(() => 0n),
-      
+        functionName: 'inventoryValueUsd6',
+      }),
       publicClient.readContract({
         address: config.clawMachineAddress,
         abi: ClawMachineABI,
-        functionName: 'getPendingReservations',
-      }).catch(() => 0n),
+        functionName: 'reservedValueUsd6',
+      }),
+      publicClient.readContract({
+        address: config.clawMachineAddress,
+        abi: ClawMachineABI,
+        functionName: 'getFee',
+      }),
+      publicClient.readContract({
+        address: config.clawMachineAddress,
+        abi: ClawMachineABI,
+        functionName: 'totalPulls',
+      }),
+      publicClient.readContract({
+        address: config.clawMachineAddress,
+        abi: ClawMachineABI,
+        functionName: 'paused',
+      }),
     ]);
 
     return {
-      canPull: canPull as boolean,
-      pullPrice: '1000000', // 1 USDC (6 decimals)
-      inventoryValue: inventoryValue.toString(),
-      pendingReservations: pendingReservations.toString(),
-      entropyFee: entropyFee.toString(),
+      network: config.network,
+      chainId: config.chainId,
+      canPull,
+      pullPrice: pullPrice.toString(),
+      inventoryValueUsd6: inventoryValueUsd6.toString(),
+      reservedValueUsd6: reservedValueUsd6.toString(),
+      fee: fee.toString(),
+      totalPulls: totalPulls.toString(),
+      paused,
     };
   } catch (error) {
-    // Return default values if contract doesn't exist yet
-    return {
-      canPull: false,
-      pullPrice: '1000000',
-      inventoryValue: '0',
-      pendingReservations: '0',
-      entropyFee: '0',
-    };
+    console.error('Failed to read machine status from ClawMachine:', error);
+    return defaults;
   }
 }
