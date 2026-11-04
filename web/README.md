@@ -46,6 +46,18 @@ Addresses live in `src/config/deployments.ts`. Anything not set via env falls
 back to the values in that file (zero placeholders until deployment). The
 mainnet USDC and xStock addresses are the canonical Monad mainnet deployments.
 
+After deploying contracts, copy the addresses from
+`contracts/deployments/monad-testnet.json` (or `monad-mainnet.json`) into the
+matching `NEXT_PUBLIC_*` variables:
+
+```bash
+jq -r '.clawMachine, .usdc' contracts/deployments/monad-testnet.json
+```
+
+Testnet needs both `NEXT_PUBLIC_CLAW_MACHINE_TESTNET` and
+`NEXT_PUBLIC_USDC_TESTNET`. Mainnet only needs
+`NEXT_PUBLIC_CLAW_MACHINE_MAINNET` (USDC is canonical).
+
 When the contracts worker publishes `contracts/abi/ClawMachine.json`, diff it
 against `src/abi/clawMachine.ts` and update the subset used by the app:
 
