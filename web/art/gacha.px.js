@@ -27,6 +27,8 @@ pal({
   o: "#ff8a7a", // red highlight
   u: "#5b8cff", // chart blue
   U: "#2f4fb8", // chart blue shadow
+  t: "#8a5a3c", // stem brown
+  T: "#5c3a26", // stem shadow
 });
 
 // ---------------------------------------------------------------- machine ---
@@ -313,23 +315,36 @@ sprite("emblem_tsla", { w: 16, h: 16 }, (c) => {
   c.px(4, 3, "#ffb3a8");
 });
 
-sprite("emblem_aapl", { w: 16, h: 16 }, `
-  ................
-  .......EE.......
-  ......EeeE......
-  .....E.ee.E.....
-  ....wwssssss....
-  ...wsssssssss...
-  ..wsssssssssss..
-  ..wssssssss.....
-  ..wssssssss.....
-  ..wssssssssss...
-  ..wssssssssss...
-  ...wssssssss....
-  ....wssssssS....
-  .....ssSSSS.....
-  ......SSS.......
-  ................`);
+sprite("emblem_aapl", { w: 16, h: 16 }, (c) => {
+  // round grey apple body
+  c.circ(7, 9, 5, "s");
+  c.circ(9, 10, 4, "s");
+  c.rect(4, 10, 6, 3, "s");
+  // top notch and bottom dimple
+  c.px(7, 4, "_");
+  c.px(7, 5, "_");
+  c.px(10, 4, "_");
+  c.px(8, 15, "_");
+  // bite on the right
+  c.circ(14, 8, 3, "_");
+  c.circ(13, 11, 2, "_");
+  // stem
+  c.rect(7, 1, 1, 4, "T");
+  c.px(8, 3, "T");
+  // leaf
+  c.poly([8, 3, 10, 1, 13, 2, 11, 4], "e");
+  c.px(10, 2, "#8cf0c4");
+  c.px(11, 3, "E");
+  c.px(12, 2, "E");
+  // light from the top left, shadow low right
+  c.px(3, 7, "w");
+  c.px(4, 6, "w");
+  c.px(4, 8, "w");
+  c.px(3, 9, "w");
+  c.circ(10, 12, 2, "S");
+  c.px(6, 14, "S");
+  c.px(5, 13, "S");
+});
 
 sprite("emblem_nvda", { w: 16, h: 16 }, (c) => {
   // green chip with pins and a glowing die

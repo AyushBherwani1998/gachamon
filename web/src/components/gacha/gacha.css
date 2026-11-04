@@ -725,14 +725,28 @@
 }
 
 @keyframes gm-tearTop {
-  to {
+  0% {
+    opacity: 1;
+    transform: translateY(0) rotate(0);
+  }
+  45% {
+    opacity: 1;
+  }
+  100% {
     opacity: 0;
     transform: translateY(-24px) rotate(-6deg);
   }
 }
 
 @keyframes gm-tearBottom {
-  to {
+  0% {
+    opacity: 1;
+    transform: translateY(0) rotate(0);
+  }
+  45% {
+    opacity: 1;
+  }
+  100% {
     opacity: 0;
     transform: translateY(24px) rotate(4deg);
   }
