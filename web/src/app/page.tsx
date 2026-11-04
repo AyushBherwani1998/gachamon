@@ -59,7 +59,8 @@ export default function Home() {
     isConnected &&
     !wrongNetwork &&
     machine.pullPrice !== undefined &&
-    (balances.allowance ?? 0n) < machine.pullPrice;
+    balances.allowance !== undefined &&
+    balances.allowance < machine.pullPrice;
   const insufficientUsdc =
     !demo &&
     isConnected &&
@@ -259,7 +260,7 @@ export default function Home() {
                           : undefined
                       }
                       shareUrl={SITE_URL}
-                      onPullAgain={handlePrimary}
+                      onPullAgain={demo || machineReady ? handlePrimary : undefined}
                     />
                   ) : (
                     <div className="grid min-h-20 place-items-center border-4 border-dashed border-border/60 px-4 py-4 text-center">
