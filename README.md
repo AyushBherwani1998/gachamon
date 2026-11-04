@@ -18,6 +18,23 @@ Built at Monad Blitz, Devcon Mumbai 2026.
 
 Sign in with Privy (email or an external wallet), approve 1 USDC, and pull.
 
+## Contract addresses (Monad mainnet, chain 143)
+
+| Contract | Address | Role |
+|---|---|---|
+| ClawMachine | [`0xbC4e651C6326Ecb440b8bF54033f2ed4323C9c72`](https://monadscan.com/address/0xbC4e651C6326Ecb440b8bF54033f2ed4323C9c72) | The gacha machine (source verified on Sourcify) |
+| Owner | [`0x96FF55a0DfbB98Cc26Cd0339DE933aCBfD37C286`](https://monadscan.com/address/0x96FF55a0DfbB98Cc26Cd0339DE933aCBfD37C286) | Deployer and owner: refunds stuck pulls, manages inventory |
+| USDC | [`0x754704Bc059F8C67012fEd69BC8A327a5aafb603`](https://monadscan.com/address/0x754704Bc059F8C67012fEd69BC8A327a5aafb603) | Payment token, 1 USDC per pull |
+| Pyth Entropy V2 | [`0xD458261E832415CFd3BAE5E416FdF3230ce6F134`](https://monadscan.com/address/0xD458261E832415CFd3BAE5E416FdF3230ce6F134) | Randomness |
+| Pyth Entropy provider | [`0x52DeaA1c84233F7bb8C8A45baeDE41091c616506`](https://monadscan.com/address/0x52DeaA1c84233F7bb8C8A45baeDE41091c616506) | Default randomness provider |
+| Chainlink feed, wTSLAx / USD | [`0xE42022cCe1913626AE4297B99291d3Ba24Cc9281`](https://monadscan.com/address/0xE42022cCe1913626AE4297B99291d3Ba24Cc9281) | Prices TSLAx |
+| Chainlink feed, wNVDAx / USD | [`0x03ffa4673c060339E6a8E5Ba1a12B3301c966bf0`](https://monadscan.com/address/0x03ffa4673c060339E6a8E5Ba1a12B3301c966bf0) | Prices NVDAx |
+| Chainlink feed, wSPYx / USD | [`0x2e2dA5717eDE960F8b77Af4cFcBDC4Ca3099006D`](https://monadscan.com/address/0x2e2dA5717eDE960F8b77Af4cFcBDC4Ca3099006D) | Prices SPYx |
+| Chainlink feed, wQQQx / USD | [`0x7CA45B17D8D43059a222dEC5d991B613F61c02d9`](https://monadscan.com/address/0x7CA45B17D8D43059a222dEC5d991B613F61c02d9) | Prices QQQx |
+| Chainlink feed, wSPCXx / USD | [`0x7577154038de77668d0188baF47707EDcd86d0b3`](https://monadscan.com/address/0x7577154038de77668d0188baF47707EDcd86d0b3) | Prices SPCXx |
+
+The feeds price the wrapped xStock; the contract divides by each token's `multiplier()`. Stock token addresses are in the Stocks table below.
+
 ## How it works
 
 ```mermaid
