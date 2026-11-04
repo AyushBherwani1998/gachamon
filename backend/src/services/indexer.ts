@@ -265,8 +265,12 @@ export async function syncToHead(): Promise<void> {
     return;
   }
 
+  const isBackfill = head - fromBlock + 1n > BigInt(config.indexerBlockRange);
+  if (isBackfill) {
+    console.log(`Indexing ClawMachine logs from block ${fromBlock} to ${head}`);
+  }
+
   const range = BigInt(config.indexerBlockRange);
-  console.log(`Indexing ClawMachine logs from block ${fromBlock} to ${head}`);
 
   while (fromBlock <= head) {
     const toBlock = fromBlock + range - 1n < head ? fromBlock + range - 1n : head;
@@ -275,6 +279,10 @@ export async function syncToHead(): Promise<void> {
     setLastBlock(toBlock);
 
     fromBlock = toBlock + 1n;
+  }
+
+  if (isBackfill) {
+    console.log(`Indexer caught up to block ${head}`);
   }
 }
 
