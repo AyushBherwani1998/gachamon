@@ -86,6 +86,9 @@ contract ClawMachine is IEntropyConsumer, Ownable, ReentrancyGuard {
     /// @notice Tokens (stocks or USDC) that could not be delivered and are claimable by the player.
     mapping(address => mapping(address => uint256)) public owed;
 
+    /// @notice Total amount of each token owed to players. Excluded from free inventory.
+    mapping(address => uint256) public totalOwed;
+
     uint256[RECENT_PULLS_SIZE] private _recentPulls;
     uint256 private _recentCursor;
     uint256 private _recentCount;
@@ -209,6 +212,7 @@ contract ClawMachine is IEntropyConsumer, Ownable, ReentrancyGuard {
             if (!_tryTransfer(stock, player, amount)) {
                 owed[player][stock] = amount;
             } else {
+                _decreaseTotalOwed(stock, amount);
                 emit OwedWithdrawn(player, stock, amount);
             }
         }
@@ -219,6 +223,7 @@ contract ClawMachine is IEntropyConsumer, Ownable, ReentrancyGuard {
             if (!_tryTransfer(usdc, player, usdcOwed)) {
                 owed[player][usdc] = usdcOwed;
             } else {
+                _decreaseTotalOwed(usdc, usdcOwed);
                 emit OwedWithdrawn(player, usdc, usdcOwed);
             }
         }
@@ -300,11 +305,17 @@ contract ClawMachine is IEntropyConsumer, Ownable, ReentrancyGuard {
             }
         }
 
-        // Inventory could not cover the whole payout: cover the rest in USDC.
+        // Inventory could not cover the whole payout: cover the rest in free USDC.
         if (remaining > 0) {
-            if (!_tryTransfer(usdc, player, remaining)) {
-                owed[player][usdc] += remaining;
-                emit PayoutOwed(pullId, player, usdc, remaining);
+            uint256 freeUsdc = _freeBalance(usdc);
+            uint256 payUsdc = remaining < freeUsdc ? remaining : freeUsdc;
+            bool paidInUsdc = payUsdc > 0 && _tryTransfer(usdc, player, payUsdc);
+            uint256 unpaid = paidInUsdc ? remaining - payUsdc : remaining;
+
+            if (unpaid > 0) {
+                owed[player][usdc] += unpaid;
+                totalOwed[usdc] += unpaid;
+                emit PayoutOwed(pullId, player, usdc, unpaid);
             }
         }
 
@@ -327,7 +338,7 @@ contract ClawMachine is IEntropyConsumer, Ownable, ReentrancyGuard {
         uint256 price = _prices[stock];
         if (price == 0) return (0, 0);
 
-        uint256 balance = _safeBalanceOf(stock);
+        uint256 balance = _freeBalance(stock);
         if (balance == 0) return (0, 0);
 
         uint256 available = (balance * price) / STOCK_UNIT;
@@ -345,6 +356,7 @@ contract ClawMachine is IEntropyConsumer, Ownable, ReentrancyGuard {
 
         if (!_tryTransfer(stock, player, amount)) {
             owed[player][stock] += amount;
+            totalOwed[stock] += amount;
             emit PayoutOwed(pullId, player, stock, amount);
         }
     }
@@ -365,6 +377,18 @@ contract ClawMachine is IEntropyConsumer, Ownable, ReentrancyGuard {
             token.staticcall(abi.encodeWithSelector(IERC20.balanceOf.selector, address(this)));
         if (!success || data.length != 32) return 0;
         balance = abi.decode(data, (uint256));
+    }
+
+    /// @dev Balance that is not already owed to players.
+    function _freeBalance(address token) private view returns (uint256) {
+        uint256 balance = _safeBalanceOf(token);
+        uint256 owedAmount = totalOwed[token];
+        return balance > owedAmount ? balance - owedAmount : 0;
+    }
+
+    function _decreaseTotalOwed(address token, uint256 amount) private {
+        uint256 current = totalOwed[token];
+        totalOwed[token] = current > amount ? current - amount : 0;
     }
 
     function _pushRecentPull(uint256 pullId) private {
@@ -406,7 +430,7 @@ contract ClawMachine is IEntropyConsumer, Ownable, ReentrancyGuard {
             address stock = _stocks[i];
             uint256 price = _prices[stock];
             if (price == 0) continue;
-            total += (_safeBalanceOf(stock) * price) / STOCK_UNIT;
+            total += (_freeBalance(stock) * price) / STOCK_UNIT;
         }
     }
 
@@ -510,12 +534,14 @@ contract ClawMachine is IEntropyConsumer, Ownable, ReentrancyGuard {
 
     function withdrawUsdc(address to, uint256 amount) external onlyOwner {
         require(to != address(0), "invalid recipient");
+        require(amount <= _freeBalance(usdc), "exceeds free balance");
         IERC20(usdc).safeTransfer(to, amount);
     }
 
     function withdrawStock(address stock, address to, uint256 amount) external onlyOwner {
         require(isStock[stock], "unknown stock");
         require(to != address(0), "invalid recipient");
+        require(amount <= _freeBalance(stock), "exceeds free balance");
         IERC20(stock).safeTransfer(to, amount);
     }
 }

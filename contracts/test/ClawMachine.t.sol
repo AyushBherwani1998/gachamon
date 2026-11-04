@@ -331,6 +331,7 @@ contract ClawMachineTest is Test {
 
         assertEq(first.balanceOf(PLAYER), 0, "nothing delivered");
         assertEq(machine.owed(PLAYER, address(first)), expectedAmount, "owed recorded");
+        assertEq(machine.totalOwed(address(first)), expectedAmount, "owed accounted");
 
         (address[] memory payoutStocks, uint256[] memory amounts) = machine.getPullPayout(pullId);
         assertEq(payoutStocks.length, 1, "allocation still recorded");
@@ -343,6 +344,7 @@ contract ClawMachineTest is Test {
 
         assertEq(first.balanceOf(PLAYER), expectedAmount, "delivered on retry");
         assertEq(machine.owed(PLAYER, address(first)), 0, "owed cleared");
+        assertEq(machine.totalOwed(address(first)), 0, "owed accounting cleared");
     }
 
     function testWithdrawOwedKeepsBalanceWhenStillBlocked() public {
@@ -381,12 +383,56 @@ contract ClawMachineTest is Test {
         _resolve(pullId, LEGENDARY_RANDOM);
 
         assertEq(machine.owed(PLAYER, address(usdc)), 10_000_000, "usdc owed");
+        assertEq(machine.totalOwed(address(usdc)), 10_000_000, "usdc owed accounted");
 
         usdc.mint(address(machine), 10_000_000);
+
+        // Owed USDC is not free balance, even though it sits in the contract.
+        vm.expectRevert("exceeds free balance");
+        machine.withdrawUsdc(address(this), 10_000_000);
 
         vm.prank(PLAYER);
         machine.withdrawOwed();
         assertEq(machine.owed(PLAYER, address(usdc)), 0, "cleared");
+        assertEq(machine.totalOwed(address(usdc)), 0, "accounting cleared");
+    }
+
+    function testOwedTokensAreExcludedFromInventoryAndOwnerWithdrawals() public {
+        uint256 firstIndex = _startIndex(COMMON_RANDOM);
+        MockStock first = MockStock(stockTokens[firstIndex]);
+        uint256 price = stockPrices[firstIndex];
+
+        first.setTransfersBlocked(true);
+        _pullAndResolve(COMMON_RANDOM);
+
+        uint256 owedAmount = machine.owed(PLAYER, address(first));
+        assertGt(owedAmount, 0, "owed");
+        assertEq(machine.totalOwed(address(first)), owedAmount, "total owed");
+
+        uint256 owedValue = (owedAmount * price) / 1e18;
+        assertApproxEqAbs(
+            machine.inventoryValueUsd6(),
+            4 * INVENTORY_USD6 - owedValue,
+            8,
+            "owed inventory excluded"
+        );
+
+        uint256 balance = first.balanceOf(address(machine));
+        uint256 free = balance - owedAmount;
+
+        first.setTransfersBlocked(false);
+
+        vm.expectRevert("exceeds free balance");
+        machine.withdrawStock(address(first), address(this), balance);
+
+        machine.withdrawStock(address(first), address(this), free);
+        assertEq(first.balanceOf(address(machine)), owedAmount, "only owed tokens remain");
+
+        vm.prank(PLAYER);
+        machine.withdrawOwed();
+
+        assertEq(first.balanceOf(address(machine)), 0, "owed delivered");
+        assertEq(machine.totalOwed(address(first)), 0, "accounting cleared");
     }
 
     // ---------------------------------------------------------------------
