@@ -314,7 +314,7 @@ export default function Home() {
             error={
               notDeployed
                 ? `ClawMachine is not deployed on ${deployment.name} yet.`
-                : feed.error ?? machine.error ?? undefined
+                : feed.error ?? undefined
             }
             explorerBase={deployment.explorerUrl}
           />
