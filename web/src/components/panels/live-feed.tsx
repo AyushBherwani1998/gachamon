@@ -143,7 +143,7 @@ function FeedRow({
 function LoadingRows() {
   return (
     <ol aria-hidden="true" className="divide-y-2 divide-dashed divide-foreground/15">
-      {Array.from({ length: 6 }, (_, index) => (
+      {Array.from({ length: 8 }, (_, index) => (
         <li
           key={index}
           className={cn(
@@ -181,6 +181,8 @@ export function LiveFeed({
     <PanelTag tone="gold">Offline</PanelTag>
   ) : loading ? (
     <PanelTag tone="muted">Syncing</PanelTag>
+  ) : sorted.length === 0 ? (
+    <PanelTag tone="muted">Waiting</PanelTag>
   ) : (
     <PanelTag tone="live">
       <span
