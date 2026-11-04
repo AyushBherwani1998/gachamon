@@ -88,6 +88,10 @@ export default function Home() {
   const panelPayouts = pull.result
     ? toPanelPayouts(pull.result.stocks, machine, pull.result.valueUsd6)
     : [];
+  // The chain knows the stock before the player tears the pack, so their own
+  // pull stays out of the feed until then.
+  const sealedPullId = pull.result && !revealed ? pull.result.pullId.toString() : null;
+  const feedItems = feed.items.filter((item) => item.pullId !== sealedPullId);
 
   const label = useMemo(() => {
     if (demo) {
@@ -178,12 +182,14 @@ export default function Home() {
         : "Drawing your card. Waiting for Pyth Entropy randomness.";
     }
     if (pull.phase === "revealed" && pull.result) {
+      // The stock stays secret until the pack is torn.
+      if (!revealed) return "";
       const symbols = pull.result.stocks.map((stock) => stock.symbol).join(", ");
-      return `${pull.result.legendary ? "Legendary" : "Common"} pull! You received ${symbols} worth ${formatUsd6(pull.result.valueUsd6)}.`;
+      return `${pull.result.legendary ? "Legendary" : "Rare"} pull! You received ${symbols} worth ${formatUsd6(pull.result.valueUsd6)}.`;
     }
     if (pull.phase === "error" && pull.error) return `Pull failed: ${pull.error}`;
     return "";
-  }, [pull.phase, pull.result, pull.error, pull.slow]);
+  }, [pull.phase, pull.result, pull.error, pull.slow, revealed]);
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -193,8 +199,8 @@ export default function Home() {
 
         {notDeployed ? <NotDeployedNotice /> : null}
 
-        <main className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
-          <section className="flex flex-col items-center gap-5">
+        <main className="grid items-start gap-6 lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)_minmax(0,340px)]">
+          <section className="flex flex-col items-center gap-4 lg:order-2">
             <div className="mx-auto w-full min-w-0 max-w-[480px]">
               <PixelGachaMachine
                 phase={pull.phase}
@@ -257,7 +263,7 @@ export default function Home() {
                   ) : (
                     <div className="grid min-h-20 place-items-center border-4 border-dashed border-border/60 px-4 py-4 text-center">
                       <p className="retro text-[9px] leading-relaxed text-muted-foreground">
-                        Tear the card in the machine to reveal it
+                        Tear your pack to see your stock
                       </p>
                     </div>
                   )
@@ -271,18 +277,25 @@ export default function Home() {
                       {pull.txHash ? <TxLink hash={pull.txHash} /> : null}
                     </CardContent>
                   </Card>
-                ) : (
-                  <div className="grid min-h-24 place-items-center border-4 border-dashed border-border/60 px-4 py-5 text-center">
-                    <p className="retro text-[9px] leading-relaxed text-muted-foreground">
-                      {demo ? "DEMO MODE READY" : "YOUR PULL APPEARS HERE"}
-                    </p>
-                  </div>
-                )}
+                ) : null}
               </div>
             ) : null}
           </section>
 
-          <aside className="flex flex-col gap-5">
+          <div className="flex min-w-0 flex-col gap-5 lg:order-1">
+            <LiveFeed
+              items={feedItems}
+              loading={feed.loading}
+              error={
+                notDeployed
+                  ? `The Gachamon machine is not deployed on ${deployment.name} yet.`
+                  : feed.error ?? machine.error ?? undefined
+              }
+              explorerBase={deployment.explorerUrl}
+            />
+          </div>
+
+          <aside className="flex min-w-0 flex-col gap-5 lg:order-3">
             <OddsPanel
               legendaryBps={machine.legendaryBps ?? 200}
               commonUsd={machine.commonPayout === undefined ? "—" : formatUsd6(machine.commonPayout)}
@@ -304,22 +317,6 @@ export default function Home() {
 
             <BalancesPanel />
             <OwedPanel />
-          </aside>
-        </main>
-
-        <section className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_400px]">
-          <LiveFeed
-            items={feed.items}
-            loading={feed.loading}
-            error={
-              notDeployed
-                ? `ClawMachine is not deployed on ${deployment.name} yet.`
-                : feed.error ?? machine.error ?? undefined
-            }
-            explorerBase={deployment.explorerUrl}
-          />
-
-          <div className="flex flex-col gap-4">
             <QrCard
               url={SITE_URL}
               caption={
@@ -330,12 +327,12 @@ export default function Home() {
               networkLabel={deployment.key === "testnet" ? "Testnet" : "Mainnet"}
             />
             <ShareButton
-              text="Pull real tokenized stocks from the pixel claw machine on @monad. 1 USDC per pull, verifiable randomness by Pyth. #MonadBlitz @monad_dev @geeky_kartikey"
+              text="Tear open a Gachamon pack and win real tokenized stocks on @monad. 1 USDC per pull, verifiable randomness by Pyth. #MonadBlitz @monad_dev @geeky_kartikey"
               url={SITE_URL}
-              label="Share the machine"
+              label="Share Gachamon"
             />
-          </div>
-        </section>
+          </aside>
+        </main>
 
         <SiteFooter />
       </div>
@@ -380,9 +377,9 @@ function PendingCard({
 
 function NotDeployedNotice() {
   return (
-    <Card className="w-full border-x-4 border-[#ffd45f]" font="normal">
+    <Card className="w-full border-x-4 border-amber-500" font="normal">
       <CardHeader font="normal" className="pb-2">
-        <CardTitle className="retro text-[10px] text-[#ffd45f]">
+        <CardTitle className="retro text-[10px] text-amber-800">
           NOT DEPLOYED ON {deployment.name.toUpperCase()} YET
         </CardTitle>
       </CardHeader>

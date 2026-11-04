@@ -35,8 +35,8 @@ export function PanelHeader({
 
 const TAG_TONES = {
   muted: "border-foreground/25 bg-foreground/5 text-muted-foreground",
-  live: "border-emerald-300/40 bg-emerald-300/10 text-emerald-200",
-  gold: "border-amber-300/40 bg-amber-300/10 text-amber-200",
+  live: "border-teal-700/50 bg-teal-300/30 text-teal-900",
+  gold: "border-amber-700/50 bg-amber-300/40 text-amber-900",
 } as const;
 
 export function PanelTag({

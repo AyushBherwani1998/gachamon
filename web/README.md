@@ -1,9 +1,10 @@
-# Claw Machine — web app
+# Gachamon — web app
 
-The player-facing app for the Monad xStocks claw machine. Pay 1 USDC, pull a
-card, and receive real tokenized stocks (xStocks) straight to your wallet.
-Randomness comes from Pyth Entropy; the payout is delivered in the entropy
-callback, so there is no claim step.
+The player-facing app for Gachamon. Pay 1 USDC, get a Rare or Legendary pack,
+tear it open, and receive real tokenized stocks (xStocks) straight to your
+wallet. Randomness comes from Pyth Entropy; the payout is delivered in the
+entropy callback, so there is no claim step. The contract and its env vars are
+still named `ClawMachine`.
 
 ## Stack
 

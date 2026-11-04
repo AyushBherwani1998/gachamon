@@ -115,7 +115,7 @@ export function QrCard({
           </div>
         </div>
 
-        <p className="retro max-w-[28ch] text-center text-[10px] leading-[1.8] text-amber-200">
+        <p className="retro max-w-[28ch] text-center text-[10px] leading-[1.8] text-amber-900">
           {caption}
         </p>
 

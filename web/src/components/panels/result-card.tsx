@@ -13,16 +13,16 @@ const SHARE_MENTIONS = "@monad_dev @geeky_kartikey";
 
 const ACCENTS = {
   legendary: {
-    text: "text-amber-300",
-    frame: "border-amber-300/35 bg-amber-300/[0.04]",
+    text: "text-amber-800",
+    frame: "border-amber-600/50 bg-amber-300/[0.18]",
     badge: "bg-amber-300 text-amber-950",
     strip: "bg-amber-300",
   },
   common: {
-    text: "text-emerald-300",
-    frame: "border-emerald-300/30 bg-emerald-300/[0.03]",
-    badge: "bg-emerald-300 text-emerald-950",
-    strip: "bg-emerald-300",
+    text: "text-sky-800",
+    frame: "border-sky-600/40 bg-sky-300/[0.12]",
+    badge: "bg-sky-400 text-sky-950",
+    strip: "bg-sky-400",
   },
 } as const;
 
@@ -31,7 +31,7 @@ function buildShareText(payouts: PanelPayout[]) {
     ? payouts.map((p) => `${p.amount} ${p.symbol}`).join(" + ")
     : "a real stock";
 
-  return `I just pulled ${pulled} out of a pixel gacha machine on @monad. Real stocks, verifiable randomness by Pyth. #MonadBlitz ${SHARE_MENTIONS}`;
+  return `I just pulled ${pulled} from a Gachamon pack on @monad. Real stocks, verifiable randomness by Pyth. #MonadBlitz ${SHARE_MENTIONS}`;
 }
 
 export function ResultCard({
@@ -59,7 +59,7 @@ export function ResultCard({
       />
       <CardHeader font="normal" className="pt-2 pb-3">
         <PanelHeader
-          eyebrow="The claw paid out"
+          eyebrow="Your pack paid out"
           title="Pull result"
           tag={
             <span
@@ -72,7 +72,7 @@ export function ResultCard({
                 name={legendary ? "crown" : "spark"}
                 className="size-2.5"
               />
-              {legendary ? "Legendary" : "Common"}
+              {legendary ? "Legendary" : "Rare"}
             </span>
           }
         />

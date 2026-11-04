@@ -14,7 +14,7 @@ export function SiteFooter() {
       ) : (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
           <span>
-            ClawMachine:{" "}
+            Machine:{" "}
             {isDeployed(deployment.clawMachine) ? (
               <a
                 href={explorerAddress(deployment.key, deployment.clawMachine)}

@@ -4,8 +4,8 @@ import { useEffect, useRef, useState } from "react";
 
 import "./gacha.css";
 
-const COLORS = ["#ffd75e", "#fff6e0", "#b79cff", "#cfd6e6", "#8b5cf6", "#3ddc97"];
-const MAX_PARTICLES = 40;
+const COLORS = ["#ffd24f", "#d98e14", "#7350d8", "#ff86bd", "#35cdbd", "#62c1ff"];
+const MAX_PARTICLES = 90;
 const DURATION = 1150;
 
 type Particle = {
@@ -46,16 +46,18 @@ export function Confetti() {
     };
 
     const originX = width / 2;
-    const originY = height * 0.46;
+    const originY = height * 0.4;
+    // The burst fills the overlay, so its reach follows the screen size.
+    const reach = Math.max(1.5, Math.min(width, height) / 280);
     const particles: Particle[] = Array.from({ length: MAX_PARTICLES }, () => {
-      const angle = -Math.PI / 2 + (random() - 0.5) * 2.4;
-      const speed = 2.2 + random() * 4.2;
+      const angle = -Math.PI / 2 + (random() - 0.5) * 3.4;
+      const speed = (2.6 + random() * 5) * reach;
       return {
-        x: originX + (random() - 0.5) * 36,
-        y: originY + (random() - 0.5) * 14,
+        x: originX + (random() - 0.5) * 80,
+        y: originY + (random() - 0.5) * 40,
         vx: Math.cos(angle) * speed,
         vy: Math.sin(angle) * speed,
-        size: 3 + Math.floor(random() * 3),
+        size: 6 + Math.floor(random() * 3) * 4,
         color: COLORS[Math.floor(random() * COLORS.length)],
         angle: random() * Math.PI,
         spin: (random() - 0.5) * 0.34,

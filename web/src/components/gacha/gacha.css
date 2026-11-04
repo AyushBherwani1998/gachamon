@@ -1,689 +1,246 @@
-.gm-root {
-  --night: oklch(0.16 0.03 285);
-  --night-deep: oklch(0.12 0.025 285);
-  --panel: oklch(0.22 0.045 285);
-  --panel-2: oklch(0.26 0.05 285);
-  --purple: oklch(0.64 0.19 285);
-  --purple-bright: oklch(0.8 0.14 285);
-  --purple-deep: oklch(0.4 0.14 285);
-  --ink: oklch(0.97 0.01 285);
-  --muted: oklch(0.76 0.02 285);
-  --silver: oklch(0.85 0.015 250);
-  --silver-dim: oklch(0.62 0.02 250);
-  --gold: oklch(0.84 0.15 85);
-  --gold-deep: oklch(0.64 0.13 75);
-  --green: oklch(0.78 0.15 160);
-  --danger: oklch(0.72 0.17 25);
-  --focus: oklch(0.88 0.17 95);
-  --mono: var(--font-geist-mono), ui-monospace, "SFMono-Regular", Menlo,
-    monospace;
-
-  position: relative;
-  isolation: isolate;
-  width: 100%;
-  max-width: 480px;
-  margin-inline: auto;
-  padding: 20px 16px 16px;
-  overflow: hidden;
+.gm-vars {
+  --ink: #2b1b45;
+  --muted-ink: #5f4f72;
+  --cream: #fff6dc;
+  --cream-deep: #f7e6b8;
+  --purple: #7350d8;
+  --pink: #d9548f;
+  --teal: #178f86;
+  --sky: #62c1ff;
+  --sky-deep: #1f6fb8;
+  --sky-pale: #d8f1ff;
+  --gold: #ffd24f;
+  --gold-deep: #94590a;
+  --gold-pale: #fff0b8;
+  --mono: var(--font-geist-mono), ui-monospace, "SFMono-Regular", Menlo, monospace;
   color: var(--ink);
-  background:
-    radial-gradient(
-      80% 58% at 50% 32%,
-      oklch(0.34 0.1 285 / 0.5) 0%,
-      transparent 70%
-    ),
-    linear-gradient(180deg, oklch(0.19 0.04 285), var(--night-deep));
-  border: 2px solid oklch(0.33 0.08 285);
-  border-radius: 2px;
-  box-shadow:
-    0 0 0 2px oklch(0.09 0.02 285),
-    0 20px 48px oklch(0.05 0.02 285 / 0.55);
   font-family: var(--font-pixel), "Courier New", monospace;
   font-variant-numeric: tabular-nums;
 }
 
-.gm-stage {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  width: 100%;
-  max-width: 352px;
-  margin-inline: auto;
-  flex-direction: column;
-  align-items: center;
-}
-
-.gm-machineArea {
-  position: relative;
-  z-index: 1;
-  width: 192px;
-  height: 240px;
-  filter: drop-shadow(0 9px 0 oklch(0.08 0.02 285 / 0.5));
-}
-
-.gm-machineGlow {
-  position: absolute;
-  inset: -38px -64px;
-  z-index: -1;
-  pointer-events: none;
-  background: radial-gradient(
-    closest-side,
-    oklch(0.62 0.2 285 / 0.4),
-    transparent 76%
-  );
-}
-
-.gm-machineImg {
+.gm-sprite {
   display: block;
-  width: 100%;
-  height: 100%;
-  image-rendering: pixelated;
-}
-
-@media (min-width: 420px) {
-  .gm-machineArea {
-    width: 256px;
-    height: 320px;
-  }
-}
-
-/* ------------------------------------------------------------- output tray */
-
-.gm-tray {
-  position: relative;
-  z-index: 2;
-  width: 100%;
-  max-width: 300px;
-  margin-top: -3px;
-  padding: 11px 12px 13px;
-  background:
-    linear-gradient(180deg, oklch(0.3 0.07 285), oklch(0.2 0.04 285)),
-    var(--panel);
-  border: 3px solid var(--purple-deep);
-  box-shadow:
-    inset 0 0 0 2px var(--night),
-    0 0 0 2px oklch(0.09 0.02 285),
-    0 10px 24px oklch(0.05 0.02 285 / 0.45);
-}
-
-.gm-tray::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 12px;
-  right: 12px;
-  height: 2px;
-  background: var(--purple-bright);
-  opacity: 0.75;
-}
-
-.gm-trayLabel {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 8px;
-  padding-bottom: 6px;
-  border-bottom: 1px dashed oklch(0.48 0.08 285 / 0.7);
-  color: var(--muted);
-  font-size: 9px;
-  letter-spacing: 0.13em;
-  line-height: 1;
-}
-
-.gm-trayTitle {
-  color: var(--purple-bright);
-}
-
-.gm-trayBay {
-  font-family: var(--mono);
-  font-size: 8px;
-  letter-spacing: 0.1em;
-  color: var(--muted);
-  white-space: nowrap;
-}
-
-.gm-trayInner {
-  position: relative;
-  display: flex;
-  min-height: 176px;
-  align-items: center;
-  justify-content: center;
-}
-
-/* ---------------------------------------------------------------- card play */
-
-.gm-cardSlot {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 9px;
-}
-
-.gm-cardMotion {
-  will-change: transform;
-}
-
-.gm-cardButton {
-  position: relative;
-  display: block;
-  width: 96px;
-  height: 128px;
-  padding: 0;
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-  cursor: pointer;
-  transition: transform 140ms ease-out;
-  touch-action: manipulation;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.gm-cardButton:hover {
-  transform: translateY(-2px);
-}
-
-.gm-cardButton:active {
-  transform: translateY(1px);
-}
-
-.gm-cardButton:focus-visible {
-  outline: 3px solid var(--focus);
-  outline-offset: 6px;
-}
-
-.gm-cardButton:disabled {
-  cursor: progress;
-}
-
-.gm-cardBackImg {
-  display: block;
-  width: 96px;
-  height: 128px;
   image-rendering: pixelated;
   user-select: none;
 }
 
-.gm-dispense {
-  animation: gm-cardDispense 460ms cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-.gm-jitter {
-  animation: gm-cardJitter 240ms steps(2, end) infinite;
-}
-
-.gm-pulse {
-  animation: gm-cardPulse 1.4s ease-in-out infinite;
-}
-
-.gm-tearHalf {
+.gm-fill {
   position: absolute;
   inset: 0;
-  display: block;
-  width: 96px;
-  height: 128px;
-  background-image: url("/sprites/card_back.png");
-  background-repeat: no-repeat;
-  background-size: 100% 100%;
-  image-rendering: pixelated;
-  pointer-events: none;
-}
-
-.gm-tearTop {
-  clip-path: polygon(
-    0 0,
-    100% 0,
-    100% 47%,
-    86% 52%,
-    72% 46%,
-    58% 55%,
-    44% 47%,
-    28% 54%,
-    14% 48%,
-    0 53%
-  );
-  animation: gm-tearTop 280ms cubic-bezier(0.32, 0.72, 0, 1) forwards;
-}
-
-.gm-tearBottom {
-  clip-path: polygon(
-    0 53%,
-    14% 48%,
-    28% 54%,
-    44% 47%,
-    58% 55%,
-    72% 46%,
-    86% 52%,
-    100% 47%,
-    100% 100%,
-    0 100%
-  );
-  animation: gm-tearBottom 280ms cubic-bezier(0.32, 0.72, 0, 1) forwards;
-}
-
-.gm-tearHint {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  color: var(--gold);
-  font-size: 10px;
-  letter-spacing: 0.12em;
-  line-height: 1;
-  text-align: center;
-}
-
-.gm-cardSlot[data-tearing="true"] .gm-tearHint {
-  visibility: hidden;
-}
-
-.gm-hintKey {
-  display: inline-grid;
-  width: 14px;
-  height: 14px;
-  place-items: center;
-  border: 1px solid currentColor;
-  font-family: var(--mono);
-  font-size: 9px;
-  line-height: 1;
-}
-
-/* -------------------------------------------------------------- empty/error */
-
-.gm-emptyCard {
-  display: flex;
-  width: 96px;
-  height: 128px;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  background:
-    repeating-linear-gradient(
-      135deg,
-      transparent 0 6px,
-      oklch(0.5 0.06 285 / 0.08) 6px 7px
-    ),
-    oklch(0.17 0.035 285);
-  border: 2px dashed var(--silver-dim);
-  text-align: center;
-}
-
-.gm-emptyCoin {
-  width: 32px;
-  height: 32px;
-  image-rendering: pixelated;
-}
-
-.gm-emptyTitle {
-  color: var(--silver);
-  font-family: var(--mono);
-  font-size: 14px;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.02em;
-  line-height: 1;
-}
-
-.gm-emptySub {
-  color: var(--muted);
-  font-size: 8px;
-  letter-spacing: 0.13em;
-  line-height: 1.2;
-}
-
-.gm-errorCard {
-  display: flex;
-  width: 96px;
-  height: 128px;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  background:
-    repeating-linear-gradient(
-      135deg,
-      transparent 0 6px,
-      oklch(0.5 0.14 25 / 0.1) 6px 7px
-    ),
-    oklch(0.17 0.04 25);
-  border: 2px solid var(--danger);
-}
-
-.gm-errorMark {
-  color: var(--danger);
-  font-size: 52px;
-  line-height: 0.9;
-}
-
-.gm-errorText {
-  color: var(--danger);
-  font-size: 10px;
-  letter-spacing: 0.14em;
-}
-
-/* ----------------------------------------------------------------- result */
-
-.gm-resultWrap {
-  position: relative;
   width: 100%;
+  height: 100%;
 }
 
-.gm-resultPanel {
+/* ---------------------------------------------------------------- machine */
+
+.gm-root {
+  position: relative;
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  align-items: center;
+}
+
+.gm-machine {
   position: relative;
   z-index: 1;
+  width: 240px;
+  height: 312px;
+  filter: drop-shadow(6px 6px 0 rgb(43 27 69 / 0.22));
+}
+
+@media (min-width: 420px) and (min-height: 860px) {
+  .gm-machine {
+    width: 320px;
+    height: 416px;
+  }
+}
+
+.gm-shake {
+  animation: gm-shake 240ms steps(2, end) infinite;
+}
+
+/* The tray sits directly under the chute, so a pack visibly falls into it. */
+.gm-tray {
+  position: relative;
+  z-index: 2;
+  display: grid;
   width: 100%;
-  padding: 12px;
-  background: linear-gradient(180deg, oklch(0.24 0.05 285), oklch(0.17 0.035 285));
-  border: 3px solid var(--frame);
-  animation: gm-resultIn 200ms ease-out both;
-}
-
-.gm-common {
-  --frame: var(--silver);
-  --frame-dim: var(--silver-dim);
-  --frame-glow: oklch(0.85 0.02 250 / 0.16);
-}
-
-.gm-legendary {
-  --frame: var(--gold);
-  --frame-dim: var(--gold-deep);
-  --frame-glow: oklch(0.84 0.15 85 / 0.24);
-}
-
-.gm-resultPanel.gm-common,
-.gm-resultPanel.gm-legendary {
+  max-width: 240px;
+  min-height: 108px;
+  margin-top: -4px;
+  place-items: center;
+  background: var(--cream-deep);
+  border: 4px solid var(--ink);
   box-shadow:
-    0 0 0 2px var(--night),
-    0 0 0 4px var(--frame-dim),
-    0 12px 28px oklch(0.05 0.02 285 / 0.55),
-    0 0 22px var(--frame-glow);
+    inset 0 4px 0 rgb(43 27 69 / 0.14),
+    6px 6px 0 rgb(43 27 69 / 0.22);
 }
 
-.gm-resultPanel.gm-staticGold {
-  box-shadow:
-    0 0 0 2px var(--night),
-    0 0 0 4px var(--gold-deep),
-    0 0 30px oklch(0.84 0.15 85 / 0.5),
-    inset 0 0 24px oklch(0.84 0.15 85 / 0.16);
+.gm-tray[data-tier="rare"] {
+  background: var(--sky-pale);
 }
 
-.gm-resultHead {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 10px;
-  padding-bottom: 7px;
-  border-bottom: 1px solid oklch(0.55 0.04 285 / 0.35);
+.gm-tray[data-tier="legendary"] {
+  background: var(--gold-pale);
 }
 
-.gm-rarity {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--frame);
-  font-size: 13px;
-  letter-spacing: 0.1em;
-  line-height: 1;
-}
-
-.gm-sparkIcon {
-  width: 8px;
-  height: 8px;
-  image-rendering: pixelated;
-}
-
-.gm-pullId {
-  color: var(--muted);
-  font-family: var(--mono);
-  font-size: 9px;
-  letter-spacing: 0.06em;
-  line-height: 1;
-  white-space: nowrap;
-}
-
-.gm-resultBody {
+.gm-trayEmpty {
   display: flex;
   align-items: center;
   gap: 10px;
+  color: var(--muted-ink);
+  font-size: 15px;
+  letter-spacing: 0.04em;
 }
 
-.gm-faceWrap {
+.gm-trayCoin {
+  width: 24px;
+  height: 24px;
+}
+
+.gm-coinSpin {
+  animation: gm-coinSpin 480ms steps(4, end) infinite;
+}
+
+.gm-trayMark {
+  color: #b3244f;
+  font-size: 28px;
+  line-height: 1;
+}
+
+.gm-trayEmpty[data-phase="error"] {
+  color: #b3244f;
+}
+
+.gm-trayDrop {
   position: relative;
-  flex: 0 0 96px;
-  width: 96px;
-  height: 128px;
+  padding-block: 4px;
 }
 
-.gm-cardFace {
+.gm-trayPack {
+  position: relative;
   display: block;
-  width: 96px;
-  height: 128px;
-  image-rendering: pixelated;
+  width: 72px;
+  height: 96px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  animation: gm-packDrop 520ms cubic-bezier(0.23, 1, 0.32, 1) both;
 }
 
-.gm-faceEmblem {
+.gm-trayPack:focus-visible {
+  outline: 3px solid var(--teal);
+  outline-offset: 3px;
+}
+
+.gm-dropFlash {
+  position: absolute;
+  inset: -60px;
+  pointer-events: none;
+  background: radial-gradient(circle, var(--gold) 0%, rgb(255 210 79 / 0.5) 38%, transparent 68%);
+  opacity: 0;
+  animation: gm-flash 700ms ease-out 180ms both;
+}
+
+.gm-trayResult {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 0;
+}
+
+.gm-trayCard {
+  position: relative;
+  display: block;
+  width: 72px;
+  height: 96px;
+}
+
+.gm-cardEmblem {
   position: absolute;
   top: 18.75%;
   left: 16.6667%;
   width: 66.6667%;
   height: 50%;
-  image-rendering: pixelated;
 }
 
-.gm-payoutList {
+.gm-trayValue {
   display: flex;
-  min-width: 0;
-  flex: 1 1 auto;
   flex-direction: column;
-}
-
-.gm-payoutRow {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 5px 0;
-  border-bottom: 1px solid oklch(0.55 0.04 285 / 0.22);
-}
-
-.gm-rowEmblem {
-  flex: none;
-  width: 32px;
-  height: 32px;
-  image-rendering: pixelated;
-}
-
-.gm-payoutText {
-  display: flex;
-  min-width: 0;
-  width: 100%;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.gm-payoutTop {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 2px 5px;
-}
-
-.gm-symbol {
-  overflow: hidden;
-  color: var(--ink);
-  font-size: 12px;
-  letter-spacing: 0.02em;
-  line-height: 1;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.gm-usd {
-  color: var(--muted);
-  font-family: var(--mono);
-  font-size: 9px;
-  line-height: 1;
-  white-space: nowrap;
-}
-
-.gm-amount {
-  overflow-wrap: anywhere;
-  color: var(--frame);
-  font-family: var(--mono);
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
-}
-
-.gm-valueLine {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  margin-top: 9px;
-  padding-top: 8px;
-  border-top: 1px solid oklch(0.55 0.04 285 / 0.22);
-}
-
-.gm-valueLabel {
-  color: var(--muted);
-  font-size: 8px;
-  letter-spacing: 0.12em;
-  line-height: 1;
-}
-
-.gm-value {
-  color: var(--frame);
+  gap: 4px;
   font-family: var(--mono);
   font-size: 14px;
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
 }
 
-.gm-resultFoot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-top: 10px;
-  padding-top: 8px;
-  border-top: 1px solid oklch(0.55 0.04 285 / 0.32);
-  font-size: 9px;
-  letter-spacing: 0.08em;
-  line-height: 1;
+.gm-trayValue strong {
+  font-family: var(--font-pixel), monospace;
+  font-size: 18px;
+  font-weight: 700;
 }
 
-.gm-walletNote {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  color: var(--ink);
-}
+/* Short screens: keep the pull button on the first screen, without the tray
+   changing height when a pack lands. */
+@media (max-height: 760px) {
+  .gm-tray {
+    min-height: 76px;
+  }
 
-.gm-walletDot {
-  width: 6px;
-  height: 6px;
-  background: var(--green);
-  box-shadow: 0 0 6px oklch(0.78 0.15 160 / 0.8);
+  .gm-trayPack,
+  .gm-trayCard {
+    width: 48px;
+    height: 64px;
+  }
 }
-
-.gm-explorer {
-  display: inline-flex;
-  min-height: 28px;
-  align-items: center;
-  color: var(--frame);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  white-space: nowrap;
-  touch-action: manipulation;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.gm-explorer:hover {
-  color: var(--ink);
-}
-
-.gm-explorer:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 3px;
-}
-
-.gm-goldFlash {
-  position: absolute;
-  inset: -16px;
-  z-index: 2;
-  pointer-events: none;
-  background: radial-gradient(
-    circle at 50% 42%,
-    oklch(0.95 0.16 95 / 0.95) 0%,
-    oklch(0.84 0.15 85 / 0.45) 42%,
-    transparent 72%
-  );
-  opacity: 0;
-  animation: gm-goldFlash 600ms ease-out forwards;
-}
-
-.gm-confetti {
-  position: absolute;
-  top: -24px;
-  left: -24px;
-  z-index: 3;
-  width: calc(100% + 48px);
-  height: calc(100% + 48px);
-  pointer-events: none;
-}
-
-/* ------------------------------------------------------------------ status */
 
 .gm-statusRow {
   display: flex;
-  min-height: 28px;
+  min-height: 34px;
   align-items: center;
   justify-content: center;
-  margin-top: 11px;
   text-align: center;
 }
 
 .gm-statusText {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
-  color: var(--ink);
-  font-size: 14px;
-  letter-spacing: 0.03em;
+  font-size: 16px;
   line-height: 1.2;
 }
 
+.gm-statusText[data-tier="legendary"] {
+  color: var(--gold-deep);
+  font-weight: 700;
+}
+
 .gm-root[data-phase="error"] .gm-statusText {
-  color: var(--danger);
+  color: #b3244f;
 }
 
 .gm-dots {
   display: inline-flex;
-  align-items: flex-end;
   gap: 3px;
-  margin-left: 5px;
-  transform: translateY(-1px);
+  margin-left: 6px;
 }
 
-.gm-dot {
+.gm-dots i {
   display: block;
   width: 4px;
   height: 4px;
-  background: var(--purple-bright);
+  background: var(--purple);
   animation: gm-dotBlink 900ms steps(2, end) infinite;
 }
 
-.gm-dot:nth-child(2) {
+.gm-dots i:nth-child(2) {
   animation-delay: 150ms;
 }
 
-.gm-dot:nth-child(3) {
+.gm-dots i:nth-child(3) {
   animation-delay: 300ms;
 }
 
-.gm-live,
-.gm-srOnly {
+.gm-live {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -695,14 +252,294 @@
   border: 0;
 }
 
-/* ---------------------------------------------------------------- keyframes */
+/* ---------------------------------------------------------------- overlay */
 
-@keyframes gm-cardDispense {
+.gm-overlay {
+  --tint: var(--sky-pale);
+  --tint-2: #c2e8ff;
+
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  /* Opaque on purpose: the feed behind can already name the stock. */
+  background-color: var(--tint);
+  background-image:
+    linear-gradient(45deg, var(--tint-2) 25%, transparent 25% 75%, var(--tint-2) 75%),
+    linear-gradient(45deg, var(--tint-2) 25%, transparent 25% 75%, var(--tint-2) 75%);
+  background-position: 0 0, 16px 16px;
+  background-size: 32px 32px;
+  animation: gm-overlayIn 180ms ease-out both;
+}
+
+.gm-overlay[data-tier="legendary"] {
+  --tint: var(--gold-pale);
+  --tint-2: #ffe690;
+}
+
+.gm-packGroup {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  animation: gm-packEnter 260ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.gm-packGroup[data-hidden="true"] {
+  display: none;
+}
+
+/* The empty pack is falling away: it must not block the reveal under it. */
+.gm-packGroup[data-torn="true"] {
+  pointer-events: none;
+}
+
+.gm-packGrip {
+  width: calc(48 * var(--px));
+  height: calc(64 * var(--px));
+  transition: transform 140ms ease-out;
+}
+
+.gm-packGrip[data-gripped="true"] {
+  transform: scale(1.02);
+}
+
+.gm-packTilt {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(calc(2 * var(--px)) calc(2 * var(--px)) 0 rgb(43 27 69 / 0.28));
+}
+
+/* Inside of the pack, seen once the strip lifts. Sits behind the torn edge. */
+.gm-packMouth {
+  position: absolute;
+  top: calc(8 * var(--px));
+  left: calc(2 * var(--px));
+  right: calc(2 * var(--px));
+  height: calc(4 * var(--px));
+  background: var(--ink);
+}
+
+.gm-packHit {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.gm-packHit:active {
+  cursor: grabbing;
+}
+
+.gm-packHit:focus-visible {
+  outline: 4px solid var(--teal);
+  outline-offset: 6px;
+}
+
+.gm-tearHint {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--ink);
+  font-size: 18px;
+  line-height: 1;
+  transition: opacity 140ms ease-out;
+}
+
+.gm-tearHint[data-gripped="true"] {
+  opacity: 0;
+}
+
+.gm-hintTouch {
+  display: none;
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .gm-hintMouse {
+    display: none;
+  }
+
+  .gm-hintTouch {
+    display: inline;
+  }
+}
+
+.gm-hintArrows {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.gm-hintArrows i {
+  display: block;
+  width: 6px;
+  height: 6px;
+  background: var(--purple);
+  animation: gm-dotBlink 900ms steps(2, end) infinite;
+}
+
+.gm-hintArrows i:nth-child(2) {
+  animation-delay: 150ms;
+}
+
+.gm-hintArrows i:nth-child(3) {
+  animation-delay: 300ms;
+}
+
+/* ----------------------------------------------------------------- reveal */
+
+.gm-reveal {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.gm-revealCard {
+  position: relative;
+  flex: none;
+  width: calc(36 * var(--px));
+  height: calc(48 * var(--px));
+  filter: drop-shadow(calc(2 * var(--px)) calc(2 * var(--px)) 0 rgb(43 27 69 / 0.28));
+  animation: gm-cardRise 460ms cubic-bezier(0.23, 1, 0.32, 1) 90ms both;
+}
+
+.gm-revealText {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  text-align: center;
+  animation: gm-textIn 240ms ease-out 340ms both;
+}
+
+.gm-revealTier {
+  margin: 0;
+  color: var(--sky-deep);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.gm-overlay[data-tier="legendary"] .gm-revealTier {
+  color: var(--gold-deep);
+}
+
+.gm-revealList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.gm-revealList li {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 10px;
+}
+
+.gm-revealSymbol {
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1.05;
+}
+
+.gm-revealAmount {
+  color: var(--muted-ink);
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+.gm-revealValue {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.gm-continue {
+  min-height: 44px;
+  margin-top: 8px;
+  padding: 0 28px;
+  color: #fff;
+  font: inherit;
+  font-size: 18px;
+  background: var(--purple);
+  border: 4px solid var(--ink);
+  box-shadow: 4px 4px 0 rgb(43 27 69 / 0.3);
+  cursor: pointer;
+  transition: transform 140ms ease-out;
+}
+
+.gm-continue:focus-visible {
+  outline: 3px solid var(--teal);
+  outline-offset: 3px;
+}
+
+.gm-goldFlash {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  background: radial-gradient(circle at 50% 40%, #fff 0%, var(--gold) 40%, transparent 78%);
+  opacity: 0;
+  animation: gm-flash 600ms ease-out both;
+}
+
+.gm-confetti {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* ------------------------------------------------------------- keyframes */
+
+@keyframes gm-shake {
+  0%,
+  100% {
+    transform: translate(-3px, 1px);
+  }
+  50% {
+    transform: translate(3px, -1px);
+  }
+}
+
+@keyframes gm-coinSpin {
+  to {
+    transform: rotateY(360deg);
+  }
+}
+
+@keyframes gm-packDrop {
   0% {
     opacity: 0;
-    transform: translateY(-64px) scale(0.94);
+    transform: translateY(-72px) scale(0.92);
   }
-  55% {
+  30% {
     opacity: 1;
   }
   100% {
@@ -711,71 +548,54 @@
   }
 }
 
-@keyframes gm-cardJitter {
-  0%,
-  100% {
-    transform: translate(-2px, 1px) rotate(-3deg);
-  }
-  50% {
-    transform: translate(2px, -1px) rotate(3deg);
-  }
-}
-
-@keyframes gm-cardPulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.62;
-  }
-}
-
-@keyframes gm-tearTop {
-  0% {
-    opacity: 1;
-    transform: translateY(0) rotate(0);
-  }
-  45% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0;
-    transform: translateY(-24px) rotate(-6deg);
-  }
-}
-
-@keyframes gm-tearBottom {
-  0% {
-    opacity: 1;
-    transform: translateY(0) rotate(0);
-  }
-  45% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0;
-    transform: translateY(24px) rotate(4deg);
-  }
-}
-
-@keyframes gm-resultIn {
+@keyframes gm-overlayIn {
   from {
     opacity: 0;
-    transform: scale(0.95);
   }
   to {
     opacity: 1;
-    transform: scale(1);
   }
 }
 
-@keyframes gm-goldFlash {
+@keyframes gm-packEnter {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes gm-cardRise {
+  from {
+    opacity: 0;
+    transform: translateY(14%) scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes gm-textIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes gm-flash {
   0% {
     opacity: 0;
   }
-  12% {
-    opacity: 0.85;
+  14% {
+    opacity: 0.9;
   }
   100% {
     opacity: 0;
@@ -786,67 +606,42 @@
   0%,
   60%,
   100% {
-    opacity: 0.22;
+    opacity: 0.25;
   }
   30% {
     opacity: 1;
   }
 }
 
-/* ------------------------------------------------------- reduced motion */
+/* -------------------------------------------------------- reduced motion */
 
 @media (prefers-reduced-motion: reduce) {
-  .gm-dispense,
-  .gm-jitter,
-  .gm-tearTop,
-  .gm-tearBottom,
-  .gm-resultPanel,
-  .gm-goldFlash,
-  .gm-dot {
+  .gm-shake,
+  .gm-coinSpin,
+  .gm-trayPack,
+  .gm-packGroup,
+  .gm-revealCard,
+  .gm-dropFlash {
     animation: none !important;
   }
 
-  .gm-cardButton {
+  .gm-packGrip {
     transition: none;
   }
 
-  .gm-cardButton:hover,
-  .gm-cardButton:active {
-    transform: none;
+  .gm-overlay,
+  .gm-revealText {
+    animation: gm-overlayIn 200ms ease-out both;
   }
 
-  .gm-resultPanel.gm-legendary {
-    box-shadow:
-      0 0 0 2px var(--night),
-      0 0 0 4px var(--gold-deep),
-      0 0 30px oklch(0.84 0.15 85 / 0.5),
-      inset 0 0 24px oklch(0.84 0.15 85 / 0.16);
+  .gm-overlay[data-tier="legendary"] .gm-revealCard {
+    filter: drop-shadow(0 0 20px var(--gold));
   }
 }
 
-[data-reduced-motion="true"] .gm-dispense,
-[data-reduced-motion="true"] .gm-jitter,
-[data-reduced-motion="true"] .gm-tearTop,
-[data-reduced-motion="true"] .gm-tearBottom,
-[data-reduced-motion="true"] .gm-resultPanel,
-[data-reduced-motion="true"] .gm-goldFlash,
-[data-reduced-motion="true"] .gm-dot {
+[data-reduced-motion="true"] .gm-shake,
+[data-reduced-motion="true"] .gm-coinSpin,
+[data-reduced-motion="true"] .gm-trayPack,
+[data-reduced-motion="true"] .gm-dropFlash {
   animation: none !important;
-}
-
-[data-reduced-motion="true"] .gm-cardButton {
-  transition: none;
-}
-
-[data-reduced-motion="true"] .gm-cardButton:hover,
-[data-reduced-motion="true"] .gm-cardButton:active {
-  transform: none;
-}
-
-[data-reduced-motion="true"] .gm-resultPanel.gm-legendary {
-  box-shadow:
-    0 0 0 2px var(--night),
-    0 0 0 4px var(--gold-deep),
-    0 0 30px oklch(0.84 0.15 85 / 0.5),
-    inset 0 0 24px oklch(0.84 0.15 85 / 0.16);
 }

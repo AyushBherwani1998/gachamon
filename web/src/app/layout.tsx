@@ -17,20 +17,20 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Claw Machine — xStocks on Monad",
+  title: "Gachamon — Gacha catch 'em all",
   description:
-    "Pull the claw. Win real tokenized stocks. 1 USDC per pull, powered by Pyth Entropy on Monad.",
+    "Tear open a pack, win real tokenized stocks. 1 USDC per pull, powered by Pyth Entropy on Monad.",
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0b0b12",
+  themeColor: "#fff4d9",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} dark h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col bg-background text-foreground">

@@ -4,9 +4,9 @@ import { Pixelify_Sans } from "next/font/google";
 import { useEffect, useRef, useState } from "react";
 import type { JSX } from "react";
 
-import { Confetti } from "./confetti";
 import "./gacha.css";
-import type { GachaPhase, GachaPayout, GachaResult } from "./types";
+import { emblemFor, PackTear } from "./pack-tear";
+import type { GachaPhase, GachaResult } from "./types";
 import { useReducedMotion } from "./use-reduced-motion";
 
 const pixelFont = Pixelify_Sans({
@@ -15,84 +15,10 @@ const pixelFont = Pixelify_Sans({
   variable: "--font-pixel",
 });
 
-const EMBLEMS: Record<string, string> = {
-  TSLAx: "/sprites/emblem_tsla.png",
-  AAPLx: "/sprites/emblem_aapl.png",
-  NVDAx: "/sprites/emblem_nvda.png",
-  SPYx: "/sprites/emblem_spy.png",
-};
-
-const TEAR_MS = 280;
-const ENTER_MS = 200;
-
-const s = {
-  amount: "gm-amount",
-  cardBackImg: "gm-cardBackImg",
-  cardButton: "gm-cardButton",
-  cardFace: "gm-cardFace",
-  cardMotion: "gm-cardMotion",
-  cardSlot: "gm-cardSlot",
-  common: "gm-common",
-  confetti: "gm-confetti",
-  dispense: "gm-dispense",
-  dot: "gm-dot",
-  dots: "gm-dots",
-  emptyCard: "gm-emptyCard",
-  emptyCoin: "gm-emptyCoin",
-  emptySub: "gm-emptySub",
-  emptyTitle: "gm-emptyTitle",
-  errorCard: "gm-errorCard",
-  errorMark: "gm-errorMark",
-  errorText: "gm-errorText",
-  explorer: "gm-explorer",
-  faceEmblem: "gm-faceEmblem",
-  faceWrap: "gm-faceWrap",
-  goldFlash: "gm-goldFlash",
-  hintKey: "gm-hintKey",
-  jitter: "gm-jitter",
-  legendary: "gm-legendary",
-  live: "gm-live",
-  machineArea: "gm-machineArea",
-  machineGlow: "gm-machineGlow",
-  machineImg: "gm-machineImg",
-  payoutList: "gm-payoutList",
-  payoutRow: "gm-payoutRow",
-  payoutText: "gm-payoutText",
-  payoutTop: "gm-payoutTop",
-  pullId: "gm-pullId",
-  pulse: "gm-pulse",
-  rarity: "gm-rarity",
-  resultBody: "gm-resultBody",
-  resultFoot: "gm-resultFoot",
-  resultHead: "gm-resultHead",
-  resultPanel: "gm-resultPanel",
-  resultWrap: "gm-resultWrap",
-  root: "gm-root",
-  rowEmblem: "gm-rowEmblem",
-  sparkIcon: "gm-sparkIcon",
-  srOnly: "gm-srOnly",
-  stage: "gm-stage",
-  staticGold: "gm-staticGold",
-  statusRow: "gm-statusRow",
-  statusText: "gm-statusText",
-  symbol: "gm-symbol",
-  tearBottom: "gm-tearBottom",
-  tearHalf: "gm-tearHalf",
-  tearHint: "gm-tearHint",
-  tearTop: "gm-tearTop",
-  tray: "gm-tray",
-  trayBay: "gm-trayBay",
-  trayInner: "gm-trayInner",
-  trayLabel: "gm-trayLabel",
-  trayTitle: "gm-trayTitle",
-  usd: "gm-usd",
-  value: "gm-value",
-  valueLabel: "gm-valueLabel",
-  valueLine: "gm-valueLine",
-  walletDot: "gm-walletDot",
-  walletNote: "gm-walletNote",
-} as const;
-
+/** Time to watch the pack land in the tray before it fills the screen. */
+const DROP_MS = 900;
+const DROP_LEGENDARY_MS = 1200;
+const DROP_REDUCED_MS = 400;
 
 export type PixelGachaMachineProps = {
   phase: GachaPhase;
@@ -100,56 +26,49 @@ export type PixelGachaMachineProps = {
   onRevealed?: () => void;
 };
 
-function emblemFor(symbol: string): string {
-  return EMBLEMS[symbol] ?? "/sprites/spark.png";
-}
-
-function payoutSummary(payouts: GachaPayout[], valueUsd: string): string {
-  const list = payouts
-    .map((payout) => `${payout.amount} ${payout.symbol}`)
-    .join(", ");
-  return `You pulled ${list || "nothing"}, about $${valueUsd}`;
-}
-
 function announcementFor(
   phase: GachaPhase,
   result: GachaResult | undefined,
-  opened: boolean,
+  continued: boolean,
 ): string {
   switch (phase) {
     case "idle":
-      return "Gacha machine ready. One USDC per pull.";
+      return "Gachamon machine ready. One USDC per pack.";
     case "approving":
       return "Approve one USDC in your wallet.";
     case "confirming":
-      return "Confirming your pull on Monad.";
+      return "Confirm your pull on Monad.";
     case "drawing":
-      return "Drawing...";
+      return "The machine is drawing your pack.";
     case "revealed":
-      if (!result) return "Waiting for your card.";
-      return opened
-        ? payoutSummary(result.payouts, result.valueUsd)
-        : "Your card is ready. Tear it open.";
+      if (!result) return "Waiting for your pack.";
+      if (continued) return "Your stock is in your wallet.";
+      return `A ${result.legendary ? "Legendary" : "Rare"} pack dropped.`;
     case "error":
       return "Something went wrong with your pull. Please try again.";
   }
 }
 
-function statusFor(phase: GachaPhase, result: GachaResult | undefined, opened: boolean) {
+function statusFor(
+  phase: GachaPhase,
+  result: GachaResult | undefined,
+  continued: boolean,
+): string {
   switch (phase) {
     case "idle":
-      return "Ready · 1 USDC per pull";
+      return "Which pack will you get?";
     case "approving":
       return "Approve 1 USDC in your wallet";
     case "confirming":
-      return "Confirming on Monad...";
+      return "Confirm your pull";
     case "drawing":
       return "Pyth is drawing";
     case "revealed":
-      if (!result) return "Waiting for your card";
-      return opened ? "In your wallet" : "One tap to tear it open";
+      if (!result) return "Waiting for your pack";
+      if (continued) return "In your wallet";
+      return result.legendary ? "LEGENDARY PACK!" : "Rare pack dropped";
     case "error":
-      return "Pull failed · try again";
+      return "Pull failed. Try again";
   }
 }
 
@@ -159,332 +78,145 @@ export function PixelGachaMachine({
   onRevealed,
 }: PixelGachaMachineProps): JSX.Element {
   const reducedMotion = useReducedMotion();
-  const [openedKey, setOpenedKey] = useState<string | null>(null);
-  const [tearingKey, setTearingKey] = useState<string | null>(null);
-  const timers = useRef<number[]>([]);
-  const revealedRef = useRef(onRevealed);
+  const [overlayKey, setOverlayKey] = useState<string | null>(null);
+  const [continuedKey, setContinuedKey] = useState<string | null>(null);
+  const trayPackRef = useRef<HTMLButtonElement>(null);
 
-  // The key changes whenever the parent moves to a different pull or phase, so
-  // face-down / tearing state resets without an effect.
+  // The key changes with each pull, so per-pull state resets without an effect.
   const sessionKey = `${phase}:${result?.pullId ?? ""}`;
-  const opened = openedKey === sessionKey;
-  const tearing = tearingKey === sessionKey;
+  const hasPack = phase === "revealed" && Boolean(result);
+  const continued = continuedKey === sessionKey;
+  const overlayOpen = hasPack && overlayKey === sessionKey;
+  const legendary = Boolean(result?.legendary);
 
   useEffect(() => {
-    revealedRef.current = onRevealed;
-  }, [onRevealed]);
+    if (!hasPack) return;
+    const delay = reducedMotion
+      ? DROP_REDUCED_MS
+      : legendary
+        ? DROP_LEGENDARY_MS
+        : DROP_MS;
+    const timer = window.setTimeout(() => setOverlayKey(sessionKey), delay);
+    return () => window.clearTimeout(timer);
+  }, [hasPack, legendary, reducedMotion, sessionKey]);
 
-  // Cancel callbacks belonging to a previous session or an unmounted machine.
-  useEffect(() => {
-    return () => {
-      timers.current.forEach((timer) => window.clearTimeout(timer));
-      timers.current = [];
-    };
-  }, [sessionKey]);
-
-  const canTear = phase === "revealed" && Boolean(result) && !opened;
-  const isDrawing = phase === "drawing";
-  const showResult = phase === "revealed" && opened && Boolean(result);
-  const showCard =
-    phase === "confirming" || phase === "drawing" || canTear;
-
-  const handleTear = () => {
-    if (!canTear || tearing || !result) return;
-
-    if (reducedMotion) {
-      setOpenedKey(sessionKey);
-      const timer = window.setTimeout(() => {
-        revealedRef.current?.();
-      }, 0);
-      timers.current.push(timer);
-      return;
-    }
-
-    setTearingKey(sessionKey);
-    const revealTimer = window.setTimeout(
-      () => setOpenedKey(sessionKey),
-      TEAR_MS,
-    );
-    const notifyTimer = window.setTimeout(
-      () => revealedRef.current?.(),
-      TEAR_MS + ENTER_MS,
-    );
-    timers.current.push(revealTimer, notifyTimer);
+  const handleDismiss = () => {
+    setOverlayKey(null);
+    requestAnimationFrame(() => trayPackRef.current?.focus());
   };
 
-  const liveMessage = announcementFor(phase, result, opened);
-  const status = statusFor(phase, result, opened);
-  const primaryPayout = result?.payouts[0];
-  const faceSrc = result?.legendary
-    ? "/sprites/card_legendary.png"
-    : "/sprites/card_common.png";
+  const handleContinue = () => {
+    setOverlayKey(null);
+    setContinuedKey(sessionKey);
+    onRevealed?.();
+  };
 
-  let bayLabel = "BAY 01";
-  if (phase === "approving") bayLabel = "APPROVE";
-  if (phase === "confirming") bayLabel = "DISPENSING";
-  if (phase === "drawing") bayLabel = "DRAWING";
-  if (phase === "error") bayLabel = "FAULT";
-  if (phase === "revealed" && result && opened) bayLabel = `PULL #${result.pullId}`;
-
-  let emptyTitle = "1 USDC";
-  let emptySub = "PER PULL";
-  if (phase === "approving") {
-    emptyTitle = "APPROVE";
-    emptySub = "IN YOUR WALLET";
-  }
-  if (phase === "revealed" && !result) {
-    emptyTitle = "WAIT";
-    emptySub = "FOR THE DRAW";
-  }
+  const status = statusFor(phase, result, continued);
+  const primary = result?.payouts[0];
+  const packSrc = legendary ? "/sprites/pack_legendary.png" : "/sprites/pack_rare.png";
+  const cardSrc = legendary ? "/sprites/card_legendary.png" : "/sprites/card_rare.png";
+  const isDrawing = phase === "drawing";
+  const isWorking = phase === "confirming" || isDrawing;
 
   return (
     <section
-      className={`${pixelFont.variable} ${pixelFont.className} ${s.root}`}
+      className={`${pixelFont.variable} ${pixelFont.className} gm-vars gm-root`}
       data-phase={phase}
-      aria-label="Claw machine card gacha"
+      aria-label="Gachamon pack machine"
     >
-      <div className={s.stage}>
-        <div className={s.machineArea}>
-          <div className={s.machineGlow} aria-hidden="true" />
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            className={s.machineImg}
-            src="/sprites/machine.png"
-            alt="Pixel-art claw machine with a glass dome full of stock cards"
-            width={64}
-            height={80}
-            draggable={false}
-          />
-        </div>
-
-        <div className={s.tray}>
-          <div className={s.trayLabel}>
-            <span className={s.trayTitle}>OUTPUT TRAY</span>
-            <span className={s.trayBay}>{bayLabel}</span>
-          </div>
-
-          <div className={s.trayInner}>
-            {showCard && (
-              <div className={s.cardSlot} data-tearing={tearing ? "true" : undefined}>
-                <div
-                  className={`${s.cardMotion} ${
-                    phase === "confirming" && !reducedMotion ? s.dispense : ""
-                  } ${isDrawing && !reducedMotion ? s.jitter : ""} ${
-                    isDrawing && reducedMotion ? s.pulse : ""
-                  }`}
-                >
-                  {canTear ? (
-                    <button
-                      type="button"
-                      className={s.cardButton}
-                      onClick={handleTear}
-                      disabled={tearing}
-                      aria-label="Tear open your card"
-                    >
-                      {tearing ? (
-                        <>
-                          <span
-                            className={`${s.tearHalf} ${s.tearTop}`}
-                            aria-hidden="true"
-                          />
-                          <span
-                            className={`${s.tearHalf} ${s.tearBottom}`}
-                            aria-hidden="true"
-                          />
-                        </>
-                      ) : (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          className={s.cardBackImg}
-                          src="/sprites/card_back.png"
-                          alt=""
-                          width={24}
-                          height={32}
-                          draggable={false}
-                        />
-                      )}
-                    </button>
-                  ) : (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      className={s.cardBackImg}
-                      src="/sprites/card_back.png"
-                      alt=""
-                      width={24}
-                      height={32}
-                      draggable={false}
-                    />
-                  )}
-                </div>
-                <span className={s.tearHint} aria-hidden="true">
-                  {canTear ? (
-                    <>
-                      <span className={s.hintKey}>↵</span> TAP TO TEAR
-                    </>
-                  ) : (
-                    "PLEASE WAIT"
-                  )}
-                </span>
-              </div>
-            )}
-
-            {!showCard && phase !== "error" && phase !== "revealed" && (
-              <div className={s.emptyCard}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  className={s.emptyCoin}
-                  src="/sprites/coin.png"
-                  alt=""
-                  width={8}
-                  height={8}
-                  draggable={false}
-                />
-                <span className={s.emptyTitle}>{emptyTitle}</span>
-                <span className={s.emptySub}>{emptySub}</span>
-              </div>
-            )}
-
-            {phase === "revealed" && !showResult && !showCard && (
-              <div className={s.emptyCard}>
-                <span className={s.emptyTitle}>{emptyTitle}</span>
-                <span className={s.emptySub}>{emptySub}</span>
-              </div>
-            )}
-
-            {phase === "error" && (
-              <div className={s.errorCard} role="img" aria-label="Pull failed">
-                <span className={s.errorMark}>!</span>
-                <span className={s.errorText}>NO PULL</span>
-              </div>
-            )}
-
-            {showResult && result && (
-              <div className={s.resultWrap}>
-                <div
-                  className={`${s.resultPanel} ${
-                    result.legendary ? s.legendary : s.common
-                  } ${result.legendary && reducedMotion ? s.staticGold : ""}`}
-                  data-rarity={result.legendary ? "legendary" : "common"}
-                >
-                  <div className={s.resultHead}>
-                    <span className={s.rarity}>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        className={s.sparkIcon}
-                        src="/sprites/spark.png"
-                        alt=""
-                        width={4}
-                        height={4}
-                        draggable={false}
-                      />
-                      {result.legendary ? "LEGENDARY" : "COMMON"}
-                    </span>
-                    <span className={s.pullId}>PULL #{result.pullId}</span>
-                  </div>
-
-                  <div className={s.resultBody}>
-                    <div className={s.faceWrap}>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        className={s.cardFace}
-                        src={faceSrc}
-                        alt=""
-                        width={24}
-                        height={32}
-                        draggable={false}
-                      />
-                      {primaryPayout && (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          className={s.faceEmblem}
-                          src={emblemFor(primaryPayout.symbol)}
-                          alt=""
-                          width={16}
-                          height={16}
-                          draggable={false}
-                        />
-                      )}
-                    </div>
-
-                    <div className={s.payoutList}>
-                      {result.payouts.map((payout, index) => (
-                        <div
-                          className={s.payoutRow}
-                          key={`${payout.symbol}-${index}`}
-                        >
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            className={s.rowEmblem}
-                            src={emblemFor(payout.symbol)}
-                            alt=""
-                            width={16}
-                            height={16}
-                            draggable={false}
-                          />
-                          <div className={s.payoutText}>
-                            <div className={s.payoutTop}>
-                              <span className={s.symbol}>{payout.symbol}</span>
-                              <span className={s.usd}>${payout.usd}</span>
-                            </div>
-                            <span className={s.amount}>{payout.amount}</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className={s.valueLine}>
-                    <span className={s.valueLabel}>TOTAL VALUE</span>
-                    <span className={s.value}>${result.valueUsd}</span>
-                  </div>
-
-                  <div className={s.resultFoot}>
-                    <span className={s.walletNote}>
-                      <span className={s.walletDot} aria-hidden="true" />
-                      IN YOUR WALLET
-                    </span>
-                    {result.explorerUrl && (
-                      <a
-                        className={s.explorer}
-                        href={result.explorerUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        VIEW TX <span aria-hidden="true">↗</span>
-                        <span className={s.srOnly}> (opens in a new tab)</span>
-                      </a>
-                    )}
-                  </div>
-                </div>
-
-                {result.legendary && !reducedMotion && (
-                  <>
-                    <div className={s.goldFlash} aria-hidden="true" />
-                    <Confetti />
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
+      <div className={`gm-machine ${isDrawing ? "gm-shake" : ""}`}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          className="gm-sprite gm-fill"
+          src="/sprites/machine.png"
+          alt="Pixel-art Gachamon machine displaying a Rare pack and a Legendary pack"
+          draggable={false}
+        />
       </div>
 
-      <div className={s.statusRow} aria-hidden="true">
-        <span className={s.statusText}>
-          {status}
-          {isDrawing && (
-            <span className={s.dots}>
-              <span className={s.dot} />
-              <span className={s.dot} />
-              <span className={s.dot} />
+      <div className="gm-tray" data-tier={hasPack ? (legendary ? "legendary" : "rare") : undefined}>
+        {hasPack && result && !continued ? (
+          <div className="gm-trayDrop" key={result.pullId}>
+            {legendary && !reducedMotion ? (
+              <span className="gm-dropFlash" aria-hidden="true" />
+            ) : null}
+            <button
+              ref={trayPackRef}
+              type="button"
+              className="gm-trayPack"
+              onClick={() => setOverlayKey(sessionKey)}
+              aria-label={`Open your ${legendary ? "Legendary" : "Rare"} pack`}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img className="gm-sprite gm-fill" src={packSrc} alt="" draggable={false} />
+            </button>
+          </div>
+        ) : null}
+
+        {hasPack && result && continued ? (
+          <div className="gm-trayResult">
+            <span className="gm-trayCard" aria-hidden="true">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img className="gm-sprite gm-fill" src={cardSrc} alt="" draggable={false} />
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                className="gm-sprite gm-cardEmblem"
+                src={primary ? emblemFor(primary.symbol) : "/sprites/coin.png"}
+                alt=""
+                draggable={false}
+              />
             </span>
-          )}
+            <span className="gm-trayValue">
+              <strong>{primary?.symbol ?? "USDC"}</strong>${result.valueUsd}
+            </span>
+          </div>
+        ) : null}
+
+        {!hasPack ? (
+          <div className="gm-trayEmpty" data-phase={phase}>
+            {phase === "error" ? (
+              <span className="gm-trayMark">!</span>
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                className={`gm-sprite gm-trayCoin ${isWorking ? "gm-coinSpin" : ""}`}
+                src="/sprites/coin.png"
+                alt=""
+                draggable={false}
+              />
+            )}
+            <span>{phase === "error" ? "NO PACK" : "1 USDC / PACK"}</span>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="gm-statusRow" aria-hidden="true">
+        <span className="gm-statusText" data-tier={hasPack && !continued && legendary ? "legendary" : undefined}>
+          {status}
+          {isDrawing ? (
+            <span className="gm-dots">
+              <i />
+              <i />
+              <i />
+            </span>
+          ) : null}
         </span>
       </div>
 
-      <p className={s.live} aria-live="polite" aria-atomic="true">
-        {liveMessage}
+      <p className="gm-live" aria-live="polite" aria-atomic="true">
+        {announcementFor(phase, result, continued)}
       </p>
+
+      {overlayOpen && result ? (
+        <PackTear
+          key={sessionKey}
+          result={result}
+          reducedMotion={reducedMotion}
+          fontClassName={`${pixelFont.variable} ${pixelFont.className}`}
+          onDismiss={handleDismiss}
+          onContinue={handleContinue}
+        />
+      ) : null}
     </section>
   );
 }

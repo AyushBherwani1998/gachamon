@@ -100,13 +100,13 @@ export function OddsPanel({
           <span className="sr-only">Loading odds and expected value…</span>
         ) : null}
 
-        {/* Odds bar: 98% common, 2% legendary. */}
+        {/* Odds bar: 98% rare, 2% legendary. */}
         <div
           aria-hidden="true"
           className="flex h-3 w-full overflow-hidden border-2 border-foreground/20"
         >
           <div
-            className="h-full bg-emerald-300"
+            className="h-full bg-sky-400"
             style={{ width: `${commonPct}%` }}
           />
           <div
@@ -160,8 +160,8 @@ export function OddsPanel({
                 <tr className="border-t-2 border-foreground/10">
                   <th scope="row" className="py-2.5 text-left font-normal">
                     <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                      <span className="retro text-[8px] uppercase text-emerald-300">
-                        Common
+                      <span className="retro text-[8px] uppercase text-sky-800">
+                        Rare
                       </span>
                       <span className="font-mono text-xs tabular-nums text-foreground">
                         {formatPct(commonPct)}
@@ -180,7 +180,7 @@ export function OddsPanel({
                 <tr className="border-t-2 border-foreground/10">
                   <th scope="row" className="py-2.5 text-left font-normal">
                     <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                      <span className="retro text-[8px] uppercase text-amber-300">
+                      <span className="retro text-[8px] uppercase text-amber-800">
                         Legendary
                       </span>
                       <span className="font-mono text-xs tabular-nums text-foreground">
@@ -207,7 +207,7 @@ export function OddsPanel({
             <dt className="font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
               EV per {pullPriceUsd} pull
             </dt>
-            <dd className="font-mono text-sm font-semibold tabular-nums text-emerald-300">
+            <dd className="font-mono text-sm font-semibold tabular-nums text-sky-800">
               {loading ? <PanelSkeleton className="h-4 w-14" /> : evLabel}
             </dd>
           </div>
@@ -215,7 +215,7 @@ export function OddsPanel({
             <dt className="font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
               House edge
             </dt>
-            <dd className="font-mono text-sm font-semibold tabular-nums text-amber-300">
+            <dd className="font-mono text-sm font-semibold tabular-nums text-amber-800">
               {loading ? <PanelSkeleton className="h-4 w-12" /> : edgeLabel}
             </dd>
           </div>

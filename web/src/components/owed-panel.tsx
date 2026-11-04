@@ -16,9 +16,9 @@ export function OwedPanel() {
   if (entries.length === 0) return null;
 
   return (
-    <Card className="w-full border-x-4 border-[#ffd45f]" font="normal">
+    <Card className="w-full border-x-4 border-amber-500" font="normal">
       <CardHeader className="pb-2">
-        <CardTitle className="retro text-[10px] text-[#ffd45f]">CLAIMABLE BALANCE</CardTitle>
+        <CardTitle className="retro text-[10px] text-amber-800">CLAIMABLE BALANCE</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <p className="text-[11px] text-muted-foreground">

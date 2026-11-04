@@ -22,8 +22,8 @@ export const privyConfig: PrivyClientConfig = {
     },
   },
   appearance: {
-    theme: "dark",
-    accentColor: "#d9ff57",
+    theme: "light",
+    accentColor: "#7350d8",
     landingHeader: "Sign in to pull",
     loginMessage: "Use email, Google, or MetaMask. A wallet is created for you if needed.",
     walletList: ["metamask", "detected_wallets"],

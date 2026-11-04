@@ -1,24 +1,25 @@
-# Gacha pixel art
+# Gachamon pixel art
 
-`gacha.px.js` is the source for every sprite in `web/public/sprites/`.
+`gacha.px.js` is the source for every sprite in `web/public/sprites/`. It is built with
+the pxl pixel-art DSL:
 
 ```bash
 cd web/art
-node ../../.agent-context/pxl/bin/pxl.js build gacha.px.js
+node <path to pxl>/bin/pxl.js build gacha.px.js
 cp out/sprites/*.png ../public/sprites/
 ```
 
-`out/` is ignored. The exported PNGs are committed so the Next.js app has no
-build-time dependency on the pxl tool.
+`out/` is ignored. The exported PNGs are committed so the Next.js app has no build-time
+dependency on the pxl tool.
 
 Assets:
 
-- `machine` 64x80 — marquee, glass dome with stock cards, coin slot, chute
-- `card_back` 24x32, `card_common` 24x32, `card_legendary` 24x32
-- `emblem_tsla`, `emblem_aapl`, `emblem_nvda`, `emblem_spy` — 16x16
+- `logo_wordmark` 95x17, `logo_icon` 16x16
+- `machine` 80x104: marquee, both packs on display, controls, empty chute
+- `pack_rare`, `pack_legendary` 48x64. The UI tears along row 10, so keep rows 8-12 free
+  of anything important.
+- `card_rare`, `card_legendary` 24x32, with a plain 16x16 emblem window at (4, 6)
+- `emblem_tsla`, `emblem_aapl`, `emblem_nvda`, `emblem_spy` 16x16
 - `coin` 8x8, `spark` 4x4
 
-The card faces keep a plain 16x16 window at (4, 6) for the emblem overlay in
-the UI. Sprites are exported with transparent backgrounds (the card faces are
-full rectangles with their own dark border) and are displayed at integer scales
-only (2x, 3x, 4x) with `image-rendering: pixelated`.
+Sprites are displayed at integer scales only, with `image-rendering: pixelated`.

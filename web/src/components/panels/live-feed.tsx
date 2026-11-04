@@ -65,7 +65,7 @@ function FeedRow({
         "flex items-center gap-3 border-l-4 pr-2 pl-3 sm:pl-4",
         ROW_HEIGHT,
         item.legendary
-          ? "border-amber-300 bg-amber-300/[0.06]"
+          ? "border-amber-300 bg-amber-300/[0.2]"
           : "border-transparent",
       )}
     >
@@ -95,7 +95,7 @@ function FeedRow({
         <p className="mt-1.5 truncate font-mono text-[10px] tabular-nums text-muted-foreground">
           {symbols}{" "}
           <span
-            className={item.legendary ? "text-amber-300" : "text-foreground"}
+            className={item.legendary ? "text-amber-800" : "text-foreground"}
           >
             {item.valueUsd}
           </span>
@@ -187,7 +187,7 @@ export function LiveFeed({
     <PanelTag tone="live">
       <span
         aria-hidden="true"
-        className="size-1.5 bg-emerald-300 motion-safe:animate-pulse"
+        className="size-1.5 bg-teal-500 motion-safe:animate-pulse"
       />
       Live
     </PanelTag>
@@ -224,7 +224,7 @@ export function LiveFeed({
                 name="capsule"
                 className="mx-auto size-10 text-muted-foreground/60"
               />
-              <p className="retro mt-4 text-[10px] text-amber-300">
+              <p className="retro mt-4 text-[10px] text-amber-800">
                 Feed offline
               </p>
               <p className="mt-2 break-words font-mono text-[11px] text-muted-foreground">
