@@ -91,7 +91,7 @@ Callback gas used: 48111   (legendary)
 Foundry uses the Ethereum gas schedule; Monad cold storage/account access is more
 expensive. Following `max(500_000, 2 x measured)`, rounded up to 50,000, the default
 is **`callbackGasLimit = 500_000`**. On mainnet the Entropy fee is a flat 1.4 MON up
-to 800k gas, so raising it to 800k costs nothing extra if a future token mix needs
+to 1M gas (verified live; 1.6 MON at 1.5M), so raising it to 800k costs nothing extra if a future token mix needs
 more headroom. The owner can change it:
 
 ```solidity

@@ -47,7 +47,7 @@ is `0x825c...`, whose provider is registered and charges about 0.128 MON for a
 500k-gas callback. Verified with:
 
 ```bash
-# mainnet fee: flat 1.4 MON up to 800k gas
+# mainnet fee: flat 1.4 MON from 100k to 1M gas (1.6 MON at 1.5M)
 cast call 0xD458261E832415CFd3BAE5E416FdF3230ce6F134 \
   "getFeeV2(address,uint32)(uint128)" \
   0x52DeaA1c84233F7bb8C8A45baeDE41091c616506 500000 \
