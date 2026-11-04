@@ -2,6 +2,7 @@
 pragma solidity 0.8.28;
 
 import {Script, console} from "forge-std/Script.sol";
+import {VmSafe} from "forge-std/Vm.sol";
 
 import {ClawMachine} from "../src/ClawMachine.sol";
 import {MockUSDC} from "../src/mocks/MockUSDC.sol";
@@ -71,7 +72,12 @@ contract DeployTestnet is Script {
         console.log("ClawMachine constructor args (ABI encoded, no 0x):");
         console.logBytes(abi.encode(address(usdc), ENTROPY, stocks, deployer, deployer));
 
-        _writeDeployment(address(usdc), address(machine), stocks, prices, deployer);
+        if (vm.isContext(VmSafe.ForgeContext.ScriptBroadcast)) {
+            _writeDeployment(address(usdc), address(machine), stocks, prices, deployer);
+        } else {
+            console.log("");
+            console.log("Dry run: not writing deployments/monad-testnet.json");
+        }
     }
 
     function _writeDeployment(

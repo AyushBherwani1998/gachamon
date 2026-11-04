@@ -2,6 +2,7 @@
 pragma solidity 0.8.28;
 
 import {Script, console} from "forge-std/Script.sol";
+import {VmSafe} from "forge-std/Vm.sol";
 
 import {ClawMachine} from "../src/ClawMachine.sol";
 
@@ -47,7 +48,12 @@ contract DeployMainnet is Script {
         console.log("ClawMachine constructor args (ABI encoded, no 0x):");
         console.logBytes(abi.encode(USDC, ENTROPY, stocks, treasury, keeper));
 
-        _writeDeployment(address(machine), stocks, keeper, treasury, deployer);
+        if (vm.isContext(VmSafe.ForgeContext.ScriptBroadcast)) {
+            _writeDeployment(address(machine), stocks, keeper, treasury, deployer);
+        } else {
+            console.log("");
+            console.log("Dry run: not writing deployments/monad-mainnet.json");
+        }
     }
 
     /// @dev Comma separated address list, e.g. "0xabc...,0xdef...". Spaces are ignored.

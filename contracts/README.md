@@ -32,7 +32,7 @@ contracts/
 │   ├── mocks/MockStock.sol      testnet xStock, owner mint()
 │   └── pyth/                    vendored Pyth Entropy V2 SDK 2.2.1 (Apache-2.0)
 ├── test/
-│   ├── ClawMachine.t.sol        33 tests incl. payout split, owed path, gas, ring buffer
+│   ├── ClawMachine.t.sol        45 tests incl. payout split, owed accounting, refunds, gas, ring buffer
 │   ├── EntropyFork.t.sol        gated live Monad testnet Entropy request check
 │   └── MockEntropy.sol          test entropy contract
 ├── script/
@@ -63,7 +63,7 @@ forge build
 forge test
 ```
 
-Expected: build succeeds, `33 tests passed, 0 failed`, and 1 skipped (the gated live-fork test).
+Expected: build succeeds, `45 tests passed, 0 failed`, and 1 skipped (the gated live-fork test).
 
 To run the live integration check against the deployed Monad testnet Entropy contract:
 
@@ -88,31 +88,43 @@ make fmt         # forge fmt
 ## How a pull resolves
 
 1. Player approves the machine for `pullPrice` USDC and calls `pull()` with `msg.value >= getFee()`.
-2. `pull()` takes `pullPrice` USDC, reserves `legendaryValue` of inventory, and calls
-   `IEntropyV2(entropy).requestV2{value: fee}(callbackGasLimit)` (default provider).
+2. `pull()` takes `pullPrice` USDC, snapshots the pull config (`pullPrice`, `commonValue`,
+   `legendaryValue`, `legendaryBps`), reserves `legendaryValue` of inventory, and calls
+   `IEntropyV2(entropy).requestV2{value: fee}(callbackGasLimit)` (default provider). A later
+   `setPullConfig` cannot change an in-flight pull.
 3. The `PullRequested` log carries the `pullId` and entropy `sequenceNumber`. Excess MON is refunded.
 4. Pyth calls `_entropyCallback`; only the configured entropy contract can enter. The machine
    computes `random % 10000 < legendaryBps`, allocates the payout round-robin from a random stock,
    transfers tokens, releases the reservation, and emits `PullResolved`.
 5. Read `getPull(id)` until `status == Resolved`, then `getPullPayout(id)` for the tokens/amounts
-   actually delivered.
+   actually delivered. If the callback never lands, the player or owner can call
+   `refundStuckPull(id)` after 10 minutes; it releases the reservation, refunds the snapshotted pull
+   price in USDC, and emits `PullRefunded`.
+
+Entropy sequences are stored per `(provider, sequence)` and the provider returned by
+`getDefaultProvider()` is captured at request time. A callback with the same sequence from another
+provider is ignored.
 
 Payout allocation rounds the token amount up by at most 1 USD-wei so a single stock can cover a
 payout without leaving dust that would trigger a second transfer. If inventory cannot cover the
 full value, the shortfall is paid in USDC from the contract. Both paths never revert the callback.
 
 Failed token transfers go to `owed(player, stock)` and emit `PayoutOwed`; `withdrawOwed()` retries
-every owed token for `msg.sender` (including a USDC shortfall).
+every owed token for `msg.sender` (including a USDC shortfall). `totalOwed[token]` tracks the global
+amount owed for each token; owed tokens are excluded from `inventoryValueUsd6()`, from the USDC
+shortfall fallback, and from owner withdrawals.
 
-`canPull()` requires: not paused, prices set and fresh (`block.timestamp - pricesUpdatedAt <=
-maxPriceAge`), every stock priced above zero, and
-`inventoryValueUsd6() >= reservedValueUsd6() + legendaryValue`.
+`canPull()` requires: not paused; every stock with a nonzero balance has a nonzero price updated
+within `maxPriceAge`; and `inventoryValueUsd6() >= reservedValueUsd6() + legendaryValue`. Prices
+are tracked per stock, so a partial `setPrices()` call cannot make other stocks' stale prices look
+fresh. `getPrices()` returns the oldest per-stock timestamp.
 
 ## Deploy to Monad testnet (chainId 10143)
 
 The testnet script deploys MockUSDC, four MockStocks (TSLAx/AAPLx/NVDAx/SPYx), and ClawMachine,
 seeds 500 USD of each stock, sets prices (250/230/180/650 USD), sets `maxPriceAge` to 7 days,
-sets keeper = deployer, and writes `deployments/monad-testnet.json`.
+sets keeper = deployer. `deployments/monad-testnet.json` is written **only when the script runs with
+`--broadcast`**; a dry run prints the addresses but writes nothing.
 
 Pyth Entropy V2 is at `0x825c0390f379C631f3Cf11A82a37D20BddF93c07` on Monad **testnet**
 (mainnet uses `0xD458261E832415CFd3BAE5E416FdF3230ce6F134`; they are different deployments).
@@ -199,8 +211,9 @@ forge script script/DeployMainnet.s.sol \
   --broadcast
 ```
 
-Addresses written to `deployments/monad-mainnet.json`: `usdc`, `clawMachine`, `entropy`,
-`deployer`, `keeper`, `treasury`, `symbols`, `stocks`, `chainId`, `deployedAt`.
+On a real `--broadcast`, addresses are written to `deployments/monad-mainnet.json`: `usdc`,
+`clawMachine`, `entropy`, `deployer`, `keeper`, `treasury`, `symbols`, `stocks`, `chainId`,
+`deployedAt`. Dry runs do not write the file.
 
 ### Fund inventory
 
@@ -335,8 +348,15 @@ Frontend/keeper should import `abi/ClawMachine.json`. Read state through views (
 - Owner: `setKeeper`, `setTreasury`, `setPullConfig`, `setCallbackGasLimit`, `setMaxPriceAge`,
   `pause`, `unpause`, `withdrawUsdc`, `withdrawStock`.
 - Keeper: `setPrices`.
-- `withdrawUsdc` can withdraw any USDC balance (the contract is the treasury), including funds
-  reserved for a pending USDC shortfall. Keep enough USDC in the machine for rare shortfalls.
+- `withdrawUsdc` / `withdrawStock` cannot withdraw balances recorded in `totalOwed`; owed tokens
+  stay in the contract until players call `withdrawOwed`.
+- `refundStuckPull(pullId)` is callable by the pull's player or the owner once
+  `block.timestamp > requestedAt + STUCK_PULL_TIMEOUT` (10 minutes). It releases the reservation,
+  refunds the snapshotted `pullPrice` in USDC (or records it in `owed` if free USDC is short), marks
+  the pull Resolved with `valueUsd6 = 0`, and emits `PullRefunded`.
+- The constructor requires every stock to report 18 decimals.
+- Per-pull state includes snapshots of `pullPrice`, `commonValue`, `legendaryValue`, and
+  `legendaryBps`; `getPrices()` returns the oldest per-stock update time.
 - Inventory is not segregated per player; `reservedValueUsd6` is an accounting reservation for
   pending legendary payouts.
 - Callback cost measured cold (`vm.cool`) in tests: ~256k gas for a one-stock common pull, ~514k
