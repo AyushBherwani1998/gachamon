@@ -290,7 +290,7 @@ export default function Home() {
 
           <aside className="flex flex-col gap-5">
             <OddsPanel
-              legendaryBps={machine.legendaryBps ?? 200}
+              legendaryBps={machine.legendaryBps}
               commonUsd={machine.commonPayout === undefined ? "—" : formatUsd6(machine.commonPayout)}
               legendaryUsd={
                 machine.legendaryPayout === undefined ? "—" : formatUsd6(machine.legendaryPayout)

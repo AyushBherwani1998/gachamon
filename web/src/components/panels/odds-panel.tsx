@@ -10,7 +10,8 @@ function parseUsd(value: string): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function formatPct(value: number): string {
+function formatPct(value: number | null): string {
+  if (value === null) return "—";
   return `${Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1)}%`;
 }
 
@@ -49,7 +50,7 @@ export function OddsPanel({
   loading = false,
   statusLabel,
 }: {
-  legendaryBps: number;
+  legendaryBps?: number;
   commonUsd: string;
   legendaryUsd: string;
   pullPriceUsd: string;
@@ -58,15 +59,18 @@ export function OddsPanel({
   loading?: boolean;
   statusLabel?: string;
 }) {
-  const legendaryPct = Math.min(Math.max(legendaryBps, 0), 10_000) / 100;
-  const commonPct = 100 - legendaryPct;
+  const legendaryPct =
+    legendaryBps === undefined
+      ? null
+      : Math.min(Math.max(legendaryBps, 0), 10_000) / 100;
+  const commonPct = legendaryPct === null ? null : 100 - legendaryPct;
 
   const price = parseUsd(pullPriceUsd);
   const common = parseUsd(commonUsd);
   const legendary = parseUsd(legendaryUsd);
 
   const ev =
-    common !== null && legendary !== null
+    common !== null && legendary !== null && commonPct !== null && legendaryPct !== null
       ? (commonPct / 100) * common + (legendaryPct / 100) * legendary
       : null;
   const edge =
@@ -105,14 +109,20 @@ export function OddsPanel({
           aria-hidden="true"
           className="flex h-3 w-full overflow-hidden border-2 border-foreground/20"
         >
-          <div
-            className="h-full bg-emerald-300"
-            style={{ width: `${commonPct}%` }}
-          />
-          <div
-            className="h-full bg-amber-300"
-            style={{ width: `${legendaryPct}%` }}
-          />
+          {commonPct === null || legendaryPct === null ? (
+            <div className="h-full w-full bg-foreground/15" />
+          ) : (
+            <>
+              <div
+                className="h-full bg-emerald-300"
+                style={{ width: `${commonPct}%` }}
+              />
+              <div
+                className="h-full bg-amber-300"
+                style={{ width: `${legendaryPct}%` }}
+              />
+            </>
+          )}
         </div>
 
         <table className="w-full border-collapse text-left">
