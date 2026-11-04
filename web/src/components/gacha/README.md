@@ -37,8 +37,8 @@ flick (0.5 px/ms, at least 15% in). Anything else springs back. Progress goes st
 to the DOM, and the rip position snaps to whole sprite pixels.
 
 The reveal maps the known tickers (`TSLAx`, `AAPLx`, `NVDAx`, `SPYx`) to their emblems.
-The machine launches with TSLAx only. Unknown symbols fall back to a spark, so a new
-ticker can't break the reveal.
+The machine launches with TSLAx, NVDAx and SPYx (QQQx and SPCXx once stocked); the list always
+comes from the contract. Unknown symbols fall back to a spark, so a new ticker can't break the reveal.
 
 ## Sound
 

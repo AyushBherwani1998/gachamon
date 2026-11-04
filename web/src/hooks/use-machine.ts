@@ -1,15 +1,19 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
 import { useMemo, useSyncExternalStore } from "react";
-import type { Address, Hex } from "viem";
+import type { Address } from "viem";
 import { useReadContracts } from "wagmi";
 
 import { clawMachineAbi } from "@/abi/clawMachine";
 import { erc20Abi } from "@/abi/erc20";
-import { deployment, isDeployed, IS_DEMO_MODE, XSTOCK_DECIMALS } from "@/config/deployments";
+import {
+  deployment,
+  isDeployed,
+  IS_DEMO_MODE,
+  XSTOCK_DECIMALS,
+  ZERO_ADDRESS,
+} from "@/config/deployments";
 import { getMockMachine, getMockState, subscribeMock } from "@/lib/mock";
-import { fetchPriceUpdate, tokenAmountTo18 } from "@/lib/prices";
 import type { MachineSnapshot, StockMeta } from "@/lib/types";
 import { shortAddress } from "@/lib/format";
 
@@ -26,18 +30,11 @@ function pick<T>(data: readonly ReadResult[] | undefined, index: number): T | un
   return item?.status === "success" ? (item.result as T) : undefined;
 }
 
-/** Normalize a token amount to 18 decimals for USD math. */
-function to18(amount: bigint, decimals: number): bigint {
-  return tokenAmountTo18(amount, decimals);
-}
-
 /**
- * Reads the machine config, supported tokens and fresh off-chain prices.
+ * Reads machine config, supported tokens and live Chainlink prices.
  *
- * Availability is deliberately NOT `canPull()`/`getInventoryValue()`: those
- * use stored on-chain prices that go stale between pulls and report false/0
- * even when a pull would succeed. We value inventory with the same fresh Pyth
- * prices the pull will submit.
+ * Availability is `canPull()` + `paused()`: the Chainlink version reads live
+ * on-chain prices, so the old stale-price caveat no longer applies.
  */
 export function useMachine(): MachineSnapshot {
   useSyncExternalStore(subscribeMock, getMockState, getMockState);
@@ -46,6 +43,7 @@ export function useMachine(): MachineSnapshot {
     () =>
       [
         { address: MACHINE, abi: clawMachineAbi, functionName: "paused" },
+        { address: MACHINE, abi: clawMachineAbi, functionName: "canPull" },
         { address: MACHINE, abi: clawMachineAbi, functionName: "pullPrice" },
         { address: MACHINE, abi: clawMachineAbi, functionName: "commonPayoutBps" },
         { address: MACHINE, abi: clawMachineAbi, functionName: "legendaryRarityBps" },
@@ -53,8 +51,9 @@ export function useMachine(): MachineSnapshot {
         { address: MACHINE, abi: clawMachineAbi, functionName: "maxPriceAge" },
         { address: MACHINE, abi: clawMachineAbi, functionName: "pendingReservations" },
         { address: MACHINE, abi: clawMachineAbi, functionName: "nextPullId" },
-        { address: MACHINE, abi: clawMachineAbi, functionName: "getEntropyFee" },
+        { address: MACHINE, abi: clawMachineAbi, functionName: "getFee" },
         { address: MACHINE, abi: clawMachineAbi, functionName: "getSupportedTokens" },
+        { address: MACHINE, abi: clawMachineAbi, functionName: "getInventoryValue" },
       ] as const,
     []
   );
@@ -72,7 +71,7 @@ export function useMachine(): MachineSnapshot {
   const data = reads.data as readonly ReadResult[] | undefined;
 
   const tokens = useMemo<Address[]>(() => {
-    const onchain = pick<readonly Address[]>(data, 9);
+    const onchain = pick<readonly Address[]>(data, 10);
     return onchain ? [...onchain] : [];
   }, [data]);
 
@@ -109,71 +108,53 @@ export function useMachine(): MachineSnapshot {
     query: { enabled: ACTIVE && tokens.length > 0, staleTime: 60_000, retry: 1 },
   });
 
-  const balanceContracts = useMemo(
+  const priceContracts = useMemo(
     () =>
       tokens.map((token) => ({
-        address: token,
-        abi: erc20Abi,
-        functionName: "balanceOf" as const,
-        args: [MACHINE] as const,
+        address: MACHINE,
+        abi: clawMachineAbi,
+        functionName: "getTokenPrice" as const,
+        args: [token] as const,
         chainId: deployment.chainId,
       })),
     [tokens]
   );
 
-  const balancesRead = useReadContracts({
-    contracts: balanceContracts,
+  const pricesRead = useReadContracts({
+    contracts: priceContracts,
     query: {
       enabled: ACTIVE && tokens.length > 0,
-      refetchInterval: 5_000,
+      refetchInterval: 10_000,
       retry: 1,
     },
-  });
-
-  const priceQuery = useQuery({
-    queryKey: ["price-update", deployment.chainId],
-    queryFn: () => fetchPriceUpdate(deployment.chainId),
-    enabled: ACTIVE,
-    refetchInterval: 15_000,
-    staleTime: 10_000,
-    retry: 1,
   });
 
   const stocks = useMemo<StockMeta[]>(() => {
     const infos = infosRead.data as readonly ReadResult[] | undefined;
     const symbols = symbolsRead.data as readonly ReadResult[] | undefined;
     return tokens.map((token, index) => {
-      const info = pick<readonly [Hex, number, boolean]>(infos, index);
+      const info = pick<readonly [Address, number, boolean]>(infos, index);
       const symbol = pick<string>(symbols, index) ?? shortAddress(token);
       return {
         address: token,
         symbol,
         decimals: info?.[1] ?? XSTOCK_DECIMALS,
-        feedId: info?.[0] ?? (`0x${"0".repeat(64)}` as Hex),
+        priceFeed: info?.[0] ?? ZERO_ADDRESS,
       };
     });
   }, [tokens, infosRead.data, symbolsRead.data]);
 
-  const prices = useMemo<bigint[]>(() => {
-    const quotes = new Map(
-      (priceQuery.data?.prices ?? []).map((quote) => [
-        quote.token.toLowerCase(),
-        BigInt(quote.priceUsd6 || "0"),
-      ])
+  const prices = useMemo(() => {
+    const results = pricesRead.data as readonly ReadResult[] | undefined;
+    return tokens.map(
+      (_, index) => pick<readonly [bigint, bigint]>(results, index)?.[0] ?? 0n
     );
-    return stocks.map((stock) => quotes.get(stock.address.toLowerCase()) ?? 0n);
-  }, [priceQuery.data, stocks]);
+  }, [tokens, pricesRead.data]);
 
-  const balances = useMemo(() => {
-    const results = balancesRead.data as readonly ReadResult[] | undefined;
-    return tokens.map((_, index) => pick<bigint>(results, index) ?? 0n);
-  }, [tokens, balancesRead.data]);
-
-  const pullPrice = pick<bigint>(data, 1);
-  const commonBps = pick<number>(data, 2);
-  const legendaryBps = pick<number>(data, 3);
-  const legendaryMultiplier = pick<number>(data, 4);
-  const pendingReservations = pick<bigint>(data, 6) ?? 0n;
+  const pullPrice = pick<bigint>(data, 2);
+  const commonBps = pick<number>(data, 3);
+  const legendaryBps = pick<number>(data, 4);
+  const legendaryMultiplier = pick<number>(data, 5);
 
   const legendaryPayout =
     pullPrice !== undefined && legendaryMultiplier !== undefined
@@ -184,68 +165,55 @@ export function useMachine(): MachineSnapshot {
       ? (pullPrice * BigInt(commonBps)) / 10_000n
       : undefined;
 
-  const inventoryValueUsd6 = useMemo(() => {
-    if (stocks.length === 0 || prices.length !== stocks.length) return undefined;
-    if (prices.every((price) => price === 0n)) return undefined;
-    return stocks.reduce((total, stock, index) => {
-      const balance = balances[index] ?? 0n;
-      const price = prices[index] ?? 0n;
-      if (balance === 0n || price === 0n) return total;
-      return total + (to18(balance, stock.decimals) * price) / 10n ** 18n;
-    }, 0n);
-  }, [stocks, prices, balances]);
-
-  const paused = pick<boolean>(data, 0) ?? false;
-  const pullable =
-    ACTIVE &&
-    !paused &&
-    inventoryValueUsd6 !== undefined &&
-    legendaryPayout !== undefined &&
-    inventoryValueUsd6 >= legendaryPayout + pendingReservations;
-
   const pricesUpdatedAt = useMemo(() => {
-    const times = (priceQuery.data?.prices ?? []).map((quote) => quote.publishTime);
+    const results = pricesRead.data as readonly ReadResult[] | undefined;
+    const times = tokens.flatMap((_, index) => {
+      const updatedAt = pick<readonly [bigint, bigint]>(results, index)?.[1];
+      return updatedAt === undefined ? [] : [updatedAt];
+    });
     if (times.length === 0) return undefined;
-    return BigInt(Math.max(...times));
-  }, [priceQuery.data]);
-
-  const priceError = priceQuery.error instanceof Error ? priceQuery.error.message : null;
+    return times.reduce((max, time) => (time > max ? time : max));
+  }, [tokens, pricesRead.data]);
 
   if (IS_DEMO_MODE) return getMockMachine();
 
+  const paused = pick<boolean>(data, 0) ?? false;
+  const canPull = pick<boolean>(data, 1) ?? false;
+
   return {
     isDeployed: ACTIVE,
-    isLoading: ACTIVE && (reads.isLoading || infosRead.isLoading || priceQuery.isLoading),
+    isLoading:
+      ACTIVE && (reads.isLoading || infosRead.isLoading || pricesRead.isLoading),
     paused,
-    pullable,
+    pullable: ACTIVE && canPull && !paused,
     pullPrice,
     commonPayout,
     legendaryPayout,
     legendaryBps,
     legendaryMultiplier,
-    maxPriceAge: pick<bigint>(data, 5),
-    totalPulls: pick<bigint>(data, 7),
-    inventoryValueUsd6,
-    reservedValueUsd6: pendingReservations,
-    entropyFee: pick<bigint>(data, 8),
+    maxPriceAge: pick<bigint>(data, 6),
+    totalPulls: pick<bigint>(data, 8),
+    inventoryValueUsd6: pick<bigint>(data, 11),
+    reservedValueUsd6: pick<bigint>(data, 7) ?? 0n,
+    entropyFee: pick<bigint>(data, 9),
     pricesUpdatedAt,
     stocks,
     prices,
     error:
       reads.error instanceof Error
         ? reads.error.message
-        : priceError ??
-          (balancesRead.error instanceof Error
-            ? balancesRead.error.message
-            : infosRead.error instanceof Error
-              ? infosRead.error.message
-              : null),
+        : pricesRead.error instanceof Error
+          ? pricesRead.error.message
+          : infosRead.error instanceof Error
+            ? infosRead.error.message
+            : symbolsRead.error instanceof Error
+              ? symbolsRead.error.message
+              : null,
     refetch: () => {
       void reads.refetch();
       void infosRead.refetch();
       void symbolsRead.refetch();
-      void balancesRead.refetch();
-      void priceQuery.refetch();
+      void pricesRead.refetch();
     },
   };
 }

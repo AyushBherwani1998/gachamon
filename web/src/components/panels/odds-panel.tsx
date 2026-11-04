@@ -47,6 +47,7 @@ export function OddsPanel({
   pullPriceUsd,
   inventoryUsd,
   totalPulls,
+  prices,
   loading = false,
   statusLabel,
 }: {
@@ -56,6 +57,8 @@ export function OddsPanel({
   pullPriceUsd: string;
   inventoryUsd?: string;
   totalPulls?: string;
+  /** Live Chainlink prices from getTokenPrice(). */
+  prices?: Array<{ symbol: string; usd: string }>;
   loading?: boolean;
   statusLabel?: string;
 }) {
@@ -235,6 +238,27 @@ export function OddsPanel({
           <StatCell label="Inventory left" value={inventoryUsd} loading={loading} />
           <StatCell label="Pulls so far" value={totalPulls} loading={loading} />
         </div>
+
+        {prices && prices.length > 0 ? (
+          <dl className="space-y-1.5 border-t-2 border-dashed border-foreground/15 pt-3">
+            <div className="flex items-baseline justify-between gap-3">
+              <dt className="font-mono text-[9px] uppercase tracking-[0.12em] text-muted-foreground">
+                Live prices
+              </dt>
+              <dd className="font-mono text-[9px] uppercase tracking-[0.12em] text-muted-foreground">
+                Chainlink
+              </dd>
+            </div>
+            {prices.map((price) => (
+              <div key={price.symbol} className="flex items-baseline justify-between gap-3">
+                <dt className="retro text-[8px] text-foreground">{price.symbol}</dt>
+                <dd className="font-mono text-[10px] tabular-nums text-muted-foreground">
+                  {price.usd}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        ) : null}
 
         <p
           className={cn(

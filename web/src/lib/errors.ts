@@ -5,20 +5,13 @@ function mapRevert(reason: string): string | null {
     return "The machine does not have enough inventory for this pull right now. Try again after a refill.";
   }
   if (/insufficient fee/i.test(reason)) {
-    return "The MON fee was too low for this price update. Refresh and try again.";
+    return "The MON fee was too low. Refresh and try again.";
   }
-  if (
-    /older than allowed age|price is older|stale|too old|price is not updated|no price feed|price feed does not exist/i.test(
-      reason
-    )
-  ) {
-    return "The Pyth price update is stale. Refresh and try again.";
+  if (/stale price|price is stale|stale|too old|price is not updated/i.test(reason)) {
+    return "The Chainlink price is stale. Try again in a moment.";
   }
-  if (/invalid update data|invalid price update|malformed/i.test(reason)) {
-    return "The Pyth price update was rejected. Refresh and try again.";
-  }
-  if (/invalid price/i.test(reason)) {
-    return "Pyth returned an invalid price. Refresh and try again.";
+  if (/invalid price|invalid feed|price feed|no price/i.test(reason)) {
+    return "The machine could not read a valid Chainlink price. Try again in a moment.";
   }
   if (/paused|enforcedpause/i.test(reason)) {
     return "The machine is paused. Try again later.";
