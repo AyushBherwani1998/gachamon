@@ -192,7 +192,7 @@ Open http://localhost:3000.
 | Contract verified | Done | [Sourcify exact match](https://sourcify-api-monad.blockvision.org/v2/contract/143/0xbC4e651C6326Ecb440b8bF54033f2ed4323C9c72) |
 | Runnable from the README | Done | See Run it: 42 contract tests, including 7 mainnet fork tests, plus a web app with `bun run dev` |
 | Post on X | Done | https://x.com/TheRealRajdeep/status/2117941252411056131 |
-| Demo video | Done | Video attached to the post above |
+| Creative ad video | Done | Video attached to the post above |
 | Contracts on Monad mainnet (bonus) | Done | `0xbC4e651C6326Ecb440b8bF54033f2ed4323C9c72` |
 | Custom domain (bonus) | Done | https://gacha-mon.xyz |
 
