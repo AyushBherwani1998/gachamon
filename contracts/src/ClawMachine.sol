@@ -683,34 +683,82 @@ contract ClawMachine is IEntropyConsumer, ReentrancyGuard, Pausable, Ownable {
         stocks = new address[](numTokens);
         amounts = new uint256[](numTokens);
 
-        // Use random number to distribute payout across tokens
-        uint256 remainingUSDC = totalPayoutUSDC;
-        
+        uint256[] memory prices = new uint256[](numTokens);
+        uint256[] memory capacities = new uint256[](numTokens);
+        uint256[] memory allocatedUSDC = new uint256[](numTokens);
+
+        // A token can only pay out what the machine currently holds, valued at the
+        // pull-time snapshot price. Without this cap a random split could assign the
+        // payout to an empty token and turn a real payout into an IOU.
         for (uint256 i = 0; i < numTokens; i++) {
             address token = supportedTokens[i];
             TokenInfo memory info = tokenInfo[token];
-            uint256 price = pullData.priceSnapshot[token]; // Use snapshot price
-            
             stocks[i] = token;
-            
+            prices[i] = pullData.priceSnapshot[token];
+            if (prices[i] == 0) continue;
+
+            uint256 balance = IERC20(token).balanceOf(address(this));
+            if (balance == 0) continue;
+
+            uint256 balanceIn1e18 = _toStandardDecimals(balance, info.decimals);
+            capacities[i] = (balanceIn1e18 * prices[i]) / PRICE_PRECISION;
+        }
+
+        // Keep the random split, but never allocate more than a token can cover.
+        uint256 remainingUSDC = totalPayoutUSDC;
+        for (uint256 i = 0; i < numTokens && remainingUSDC > 0; i++) {
+            if (capacities[i] == 0) continue;
+
+            uint256 allocationUSDC;
             if (i == numTokens - 1) {
-                // Last token gets remaining value
-                if (remainingUSDC > 0 && price > 0) {
-                    uint256 amountIn1e18 = (remainingUSDC * PRICE_PRECISION) / price;
-                    amounts[i] = _fromStandardDecimals(amountIn1e18, info.decimals);
-                }
+                allocationUSDC = remainingUSDC;
             } else {
-                // Random allocation
                 uint256 seed = uint256(keccak256(abi.encodePacked(randomNumber, i)));
-                uint256 allocationBps = (seed % (BPS_DENOMINATOR + 1));
-                uint256 allocationUSDC = (remainingUSDC * allocationBps) / BPS_DENOMINATOR;
-                
-                if (allocationUSDC > 0 && price > 0) {
-                    uint256 amountIn1e18 = (allocationUSDC * PRICE_PRECISION) / price;
-                    amounts[i] = _fromStandardDecimals(amountIn1e18, info.decimals);
-                    remainingUSDC -= allocationUSDC;
-                }
+                uint256 allocationBps = seed % (BPS_DENOMINATOR + 1);
+                allocationUSDC = (remainingUSDC * allocationBps) / BPS_DENOMINATOR;
             }
+
+            if (allocationUSDC > capacities[i]) allocationUSDC = capacities[i];
+            if (allocationUSDC > remainingUSDC) allocationUSDC = remainingUSDC;
+
+            allocatedUSDC[i] = allocationUSDC;
+            remainingUSDC -= allocationUSDC;
+        }
+
+        // Give anything the caps left behind to tokens that still have spare balance,
+        // in order. This is what makes an empty token harmless instead of an IOU.
+        for (uint256 i = 0; i < numTokens && remainingUSDC > 0; i++) {
+            if (allocatedUSDC[i] >= capacities[i]) continue;
+
+            uint256 spare = capacities[i] - allocatedUSDC[i];
+            uint256 extra = remainingUSDC < spare ? remainingUSDC : spare;
+            allocatedUSDC[i] += extra;
+            remainingUSDC -= extra;
+        }
+
+        // Only when the whole inventory cannot cover the payout, assign the uncovered
+        // part to a token with no balance so the existing transfer fallback records it
+        // as an owed balance instead of silently dropping it.
+        if (remainingUSDC > 0) {
+            uint256 shortfallIndex = type(uint256).max;
+            for (uint256 i = 0; i < numTokens; i++) {
+                if (prices[i] == 0) continue;
+                if (capacities[i] == 0) {
+                    shortfallIndex = i;
+                    break;
+                }
+                shortfallIndex = i;
+            }
+            if (shortfallIndex != type(uint256).max) {
+                allocatedUSDC[shortfallIndex] += remainingUSDC;
+            }
+        }
+
+        for (uint256 i = 0; i < numTokens; i++) {
+            if (allocatedUSDC[i] == 0 || prices[i] == 0) continue;
+
+            uint256 amountIn1e18 = (allocatedUSDC[i] * PRICE_PRECISION) / prices[i];
+            amounts[i] = _fromStandardDecimals(amountIn1e18, tokenInfo[stocks[i]].decimals);
         }
     }
 

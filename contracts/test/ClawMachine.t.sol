@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {Test, console} from "forge-std/Test.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ClawMachine} from "../src/ClawMachine.sol";
 import {MockERC20} from "./mocks/MockERC20.sol";
 import {MockEntropy} from "./mocks/MockEntropy.sol";
@@ -536,5 +537,155 @@ contract ClawMachineTest is Test {
         // Check price snapshot was stored
         uint256 tslaPrice = claw.getPullPriceSnapshot(pullId, address(tsla));
         assertGt(tslaPrice, 0, "TSLA price should be snapshotted");
+    }
+
+    // ============ Inventory-capped payouts ============
+
+    function test_EmptyTokenGetsSkipped() public {
+        // No NVDA inventory: a random split must not try to pay in NVDA.
+        uint256 nvdaBalance = nvda.balanceOf(address(claw));
+        vm.prank(owner);
+        claw.withdrawInventory(address(nvda), nvdaBalance);
+
+        vm.prank(player);
+        usdc.approve(address(claw), PULL_PRICE);
+
+        bytes[] memory priceUpdate = _getEmptyPriceUpdate();
+        vm.prank(player);
+        uint256 pullId = claw.pull{value: TOTAL_FEE}(bytes32(uint256(12345)), priceUpdate);
+
+        entropy.fulfillWithRoll(1, 500);
+
+        assertEq(nvda.balanceOf(player), 0, "empty token pays nothing");
+        _assertNoOwed();
+        assertApproxEqRel(
+            _playerPayoutValue(pullId),
+            730_000,
+            0.01e18,
+            "payout comes from the funded tokens"
+        );
+    }
+
+    function test_LowBalanceTokenIsCapped() public {
+        vm.prank(player);
+        usdc.approve(address(claw), PULL_PRICE);
+
+        bytes[] memory priceUpdate = _getEmptyPriceUpdate();
+        vm.prank(player);
+        uint256 pullId = claw.pull{value: TOTAL_FEE}(bytes32(uint256(12345)), priceUpdate);
+
+        // Drain after the pull, then leave a lopsided but sufficient inventory.
+        _drainInventory();
+        tsla.mint(address(claw), 0.00004 ether); // 0.01 USD, far below its random share
+        nvda.mint(address(claw), 0.0006 ether); // 0.30 USD
+        aapl.mint(address(claw), 0.002 ether); // 0.30 USD
+        spy.mint(address(claw), 0.0025 ether); // 1.00 USD
+
+        // A roll whose first random allocation is > 50% of the payout, so the TSLA
+        // cap is guaranteed to bind and the remainder must come from other tokens.
+        entropy.fulfillWithRoll(1, _findLargeFirstAllocationRoll());
+
+        assertEq(tsla.balanceOf(player), 0.00004 ether, "low token paid only its balance");
+        _assertNoOwed();
+        assertApproxEqRel(
+            _playerPayoutValue(pullId),
+            730_000,
+            0.01e18,
+            "remainder paid by the other tokens"
+        );
+    }
+
+    function test_AllTokensEmptyFallsBackToOwed() public {
+        vm.prank(player);
+        usdc.approve(address(claw), PULL_PRICE);
+
+        bytes[] memory priceUpdate = _getEmptyPriceUpdate();
+        vm.prank(player);
+        uint256 pullId = claw.pull{value: TOTAL_FEE}(bytes32(uint256(12345)), priceUpdate);
+
+        // Inventory disappears between the request and the callback.
+        _drainInventory();
+        entropy.fulfillWithRoll(1, 500);
+
+        _assertNoPlayerTokens();
+
+        (address[] memory owedTokens, ) = claw.getOwedBalance(player);
+        assertEq(owedTokens.length, 1, "shortfall recorded as owed");
+        assertApproxEqRel(_owedValue(pullId), 730_000, 0.01e18, "whole payout owed");
+        assertEq(claw.getPendingReservations(), 0, "reservation released");
+    }
+
+    function test_ExactFitPaysWithoutOwed() public {
+        vm.prank(player);
+        usdc.approve(address(claw), PULL_PRICE);
+
+        bytes[] memory priceUpdate = _getEmptyPriceUpdate();
+        vm.prank(player);
+        uint256 pullId = claw.pull{value: TOTAL_FEE}(bytes32(uint256(12345)), priceUpdate);
+
+        // Exactly 0.73 USD of SPY ($400): 730_000 * 1e18 / 400_000_000.
+        _drainInventory();
+        uint256 exactAmount = (730_000 * 1e18) / 400_000_000;
+        spy.mint(address(claw), exactAmount);
+
+        entropy.fulfillWithRoll(1, 500);
+
+        assertEq(spy.balanceOf(player), exactAmount, "exact fit paid in full");
+        _assertNoOwed();
+        assertEq(_playerPayoutValue(pullId), 730_000, "exact payout value");
+    }
+
+    function _drainInventory() internal {
+        address[4] memory tokens = [address(tsla), address(nvda), address(aapl), address(spy)];
+        vm.startPrank(owner);
+        for (uint256 i = 0; i < tokens.length; i++) {
+            uint256 balance = IERC20(tokens[i]).balanceOf(address(claw));
+            if (balance > 0) {
+                claw.withdrawInventory(tokens[i], balance);
+            }
+        }
+        vm.stopPrank();
+    }
+
+    function _playerPayoutValue(uint256 pullId) internal view returns (uint256 value) {
+        address[4] memory tokens = [address(tsla), address(nvda), address(aapl), address(spy)];
+        for (uint256 i = 0; i < tokens.length; i++) {
+            uint256 balance = IERC20(tokens[i]).balanceOf(player);
+            uint256 price = claw.getPullPriceSnapshot(pullId, tokens[i]);
+            value += (balance * price) / 1e18;
+        }
+    }
+
+    function _owedValue(uint256 pullId) internal view returns (uint256 value) {
+        (address[] memory owedTokens, uint256[] memory owedAmounts) = claw.getOwedBalance(player);
+        for (uint256 i = 0; i < owedTokens.length; i++) {
+            value += (owedAmounts[i] * claw.getPullPriceSnapshot(pullId, owedTokens[i])) / 1e18;
+        }
+    }
+
+    function _assertNoOwed() internal view {
+        (address[] memory owedTokens, ) = claw.getOwedBalance(player);
+        assertEq(owedTokens.length, 0, "no owed balances");
+    }
+
+    function _assertNoPlayerTokens() internal view {
+        assertEq(tsla.balanceOf(player), 0);
+        assertEq(nvda.balanceOf(player), 0);
+        assertEq(aapl.balanceOf(player), 0);
+        assertEq(spy.balanceOf(player), 0);
+    }
+
+    /**
+     * @dev Common roll (>= 200) whose first random allocation is > 50%, matching
+     *      `_selectStocks`' seed derivation.
+     */
+    function _findLargeFirstAllocationRoll() internal pure returns (uint256) {
+        for (uint256 roll = 201; roll < 10_000; roll++) {
+            uint256 seed = uint256(keccak256(abi.encodePacked(bytes32(roll), uint256(0))));
+            if (seed % 10_001 > 5_000) {
+                return roll;
+            }
+        }
+        revert("No suitable roll");
     }
 }
