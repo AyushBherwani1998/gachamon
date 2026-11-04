@@ -46,19 +46,16 @@ const RESULTS: Record<"common" | "legendary", GachaResult> = {
   common: {
     pullId: "2481",
     legendary: false,
-    payouts: [{ symbol: "NVDAx", amount: "0.0036", usd: "0.73" }],
+    payouts: [{ symbol: "TSLAx", amount: "0.0017", usd: "0.73" }],
     valueUsd: "0.73",
-    explorerUrl: "https://testnet.monadscan.com",
+    explorerUrl: "https://monadscan.com",
   },
   legendary: {
     pullId: "2482",
     legendary: true,
-    payouts: [
-      { symbol: "TSLAx", amount: "0.0182", usd: "7.28" },
-      { symbol: "SPYx", amount: "0.0051", usd: "2.72" },
-    ],
+    payouts: [{ symbol: "TSLAx", amount: "0.0237", usd: "10.00" }],
     valueUsd: "10.00",
-    explorerUrl: "https://testnet.monadscan.com",
+    explorerUrl: "https://monadscan.com",
   },
 };
 
@@ -188,7 +185,7 @@ export default function PreviewPage() {
                 >
                   Common · one payout
                   <span className="mt-1 block font-mono text-[9px] normal-case tracking-normal text-zinc-400">
-                    NVDAx 0.0036 · $0.73
+                    TSLAx 0.0017 · $0.73
                   </span>
                 </button>
                 <button
@@ -203,9 +200,9 @@ export default function PreviewPage() {
                   }
                   onClick={() => chooseResult("legendary")}
                 >
-                  Legendary · two payouts
+                  Legendary · one payout
                   <span className="mt-1 block font-mono text-[9px] normal-case tracking-normal text-zinc-400">
-                    TSLAx + SPYx · $10.00
+                    TSLAx 0.0237 · $10.00
                   </span>
                 </button>
               </div>

@@ -74,7 +74,7 @@ export function useFeed(machine: MachineSnapshot, ownPull: PullResult | null): {
         ...stock,
         symbol: symbolFor.get(stock.address.toLowerCase()) ?? stock.symbol,
       })),
-    }));
+    })).slice(0, 10);
     const chainPulls = (feedQuery.data?.pulls ?? []).map(feedPullToRecent);
     return toFeedItems(
       dedupePulls([...own, ...backendPulls], chainPulls, 20),

@@ -76,9 +76,13 @@ export function dedupePulls(own: RecentPull[], chain: RecentPull[], limit = 20):
     if (seen.has(key)) continue;
     seen.add(key);
     merged.push(pull);
-    if (merged.length >= limit) break;
   }
-  return merged;
+  return merged
+    .sort((a, b) => {
+      if (a.resolvedAt !== b.resolvedAt) return b.resolvedAt - a.resolvedAt;
+      return a.id === b.id ? 0 : a.id > b.id ? -1 : 1;
+    })
+    .slice(0, limit);
 }
 
 export function pullResultToRecent(

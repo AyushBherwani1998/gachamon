@@ -38,7 +38,7 @@ type GachaResult = {
 };
 ```
 
-The result panel maps `TSLAx`, `AAPLx`, `NVDAx` and `SPYx` to their emblems.
+The result panel maps the known tickers (`TSLAx`, `AAPLx`, `NVDAx`, `SPYx`) to their emblems; the machine launches with TSLAx only and the list always comes from the contract.
 Unknown symbols fall back to a spark, so the component never breaks on a new
 ticker.
 

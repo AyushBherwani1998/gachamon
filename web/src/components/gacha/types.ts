@@ -7,7 +7,7 @@ export type GachaPhase =
   | "error";
 
 export type GachaPayout = {
-  /** Stock ticker, e.g. "NVDAx". */
+  /** Stock ticker, e.g. "TSLAx". */
   symbol: "TSLAx" | "AAPLx" | "NVDAx" | "SPYx" | string;
   /** Human units, e.g. "0.0036". */
   amount: string;

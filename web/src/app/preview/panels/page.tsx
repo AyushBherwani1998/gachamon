@@ -35,7 +35,7 @@ function buildFeed(now: number): FeedItem[] {
       pullId: "1042",
       player: ADDRESSES[0],
       legendary: true,
-      payouts: [{ symbol: "NVDAx", amount: "0.0547", usd: "$10.00" }],
+      payouts: [{ symbol: "TSLAx", amount: "0.0237", usd: "$10.00" }],
       valueUsd: "$10.00",
       resolvedAt: now - 38,
     },
@@ -43,7 +43,7 @@ function buildFeed(now: number): FeedItem[] {
       pullId: "1041",
       player: ADDRESSES[1],
       legendary: false,
-      payouts: [{ symbol: "SPYx", amount: "0.0011", usd: "$0.73" }],
+      payouts: [{ symbol: "TSLAx", amount: "0.0017", usd: "$0.73" }],
       valueUsd: "$0.73",
       resolvedAt: now - 140,
     },
@@ -59,7 +59,7 @@ function buildFeed(now: number): FeedItem[] {
       pullId: "1039",
       player: ADDRESSES[3],
       legendary: false,
-      payouts: [{ symbol: "AAPLx", amount: "0.0027", usd: "$0.73" }],
+      payouts: [{ symbol: "TSLAx", amount: "0.0017", usd: "$0.73" }],
       valueUsd: "$0.73",
       resolvedAt: now - 420,
     },
@@ -67,7 +67,7 @@ function buildFeed(now: number): FeedItem[] {
       pullId: "1038",
       player: ADDRESSES[4],
       legendary: false,
-      payouts: [{ symbol: "NVDAx", amount: "0.0041", usd: "$0.73" }],
+      payouts: [{ symbol: "TSLAx", amount: "0.0017", usd: "$0.73" }],
       valueUsd: "$0.73",
       resolvedAt: now - 610,
     },
@@ -83,7 +83,7 @@ function buildFeed(now: number): FeedItem[] {
       pullId: "1036",
       player: ADDRESSES[6],
       legendary: false,
-      payouts: [{ symbol: "SPYx", amount: "0.0011", usd: "$0.73" }],
+      payouts: [{ symbol: "TSLAx", amount: "0.0017", usd: "$0.73" }],
       valueUsd: "$0.73",
       resolvedAt: now - 1_320,
     },
@@ -91,7 +91,7 @@ function buildFeed(now: number): FeedItem[] {
       pullId: "1035",
       player: ADDRESSES[7],
       legendary: false,
-      payouts: [{ symbol: "AAPLx", amount: "0.0027", usd: "$0.73" }],
+      payouts: [{ symbol: "TSLAx", amount: "0.0017", usd: "$0.73" }],
       valueUsd: "$0.73",
       resolvedAt: now - 1_860,
     },
@@ -149,7 +149,7 @@ export default function PanelsPreviewPage() {
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
               <p className="retro text-[9px] leading-relaxed text-amber-300">
-                Panel gallery · testnet data
+                Panel gallery · mock data
               </p>
               <h1 className="retro mt-2 text-lg leading-[1.7] sm:text-2xl">
                 Pull. Show. Share.
@@ -186,7 +186,7 @@ export default function PanelsPreviewPage() {
             <ResultCard
               legendary
               payouts={[
-                { symbol: "NVDAx", amount: "0.0547", usd: "$10.00" },
+                { symbol: "TSLAx", amount: "0.0237", usd: "$10.00" },
               ]}
               valueUsd="$10.00"
               explorerUrl={`${EXPLORER}/tx/0x1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f809`}
@@ -258,7 +258,7 @@ export default function PanelsPreviewPage() {
                   </ul>
                 </div>
                 <ShareButton
-                  text="Free play on testnet - pull a real stock for 1 USDC on @monad. Verifiable randomness by Pyth. #MonadBlitz @monad_dev @geeky_kartikey"
+                  text="Pull a real stock for 1 USDC on @monad. Verifiable randomness by Pyth. #MonadBlitz @monad_dev @geeky_kartikey"
                   url={LIVE_URL}
                   label="Share the machine"
                 />

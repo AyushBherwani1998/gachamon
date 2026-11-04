@@ -2,12 +2,16 @@
 
 The player-facing app for the Monad xStocks claw machine. Pay 1 USDC, pull a
 card, and receive real tokenized stocks (xStocks) straight to your wallet.
-Randomness comes from Pyth Entropy; the payout is delivered in the entropy
-callback, so there is no claim step.
+Prices come from Pyth price feeds; randomness comes from Pyth Entropy, and the
+payout is delivered inside the entropy callback. There is no claim step.
+
+The launch machine supports **TSLAx only**. The token list is never hardcoded:
+it is read from the contract (`getSupportedTokens()` + `tokenInfo(token)`), so
+a token added later with `addToken` appears after a refresh.
 
 ## Stack
 
-- Next.js 16 (App Router, TypeScript, `src/` directory)
+- Next.js 16 (App Router, TypeScript, `src/` directory, Cache Components)
 - Tailwind CSS v4 + shadcn/ui + [8bitcn](https://www.8bitcn.com) pixel components
 - Privy (`@privy-io/react-auth` + `@privy-io/wagmi`) for sign-in
 - wagmi + viem + TanStack Query
@@ -18,96 +22,48 @@ callback, so there is no claim step.
 ```bash
 cd web
 bun install
-cp .env.example .env.local   # fill in the addresses once contracts are deployed
+cp .env.example .env.local   # fill in the machine address and PYTH_API_KEY
 bun run dev                  # http://localhost:3000
 ```
 
 Other commands:
 
 ```bash
-bun run build
-bun run lint
 bun run typecheck
+bun run lint
+bun run build
 ```
 
 ## Environment variables
 
 | Variable | Purpose |
 | --- | --- |
-| `NEXT_PUBLIC_DEFAULT_NETWORK` | `testnet` (default) or `mainnet` |
+| `NEXT_PUBLIC_DEFAULT_NETWORK` | `mainnet` (default, the real demo) or `testnet` |
 | `NEXT_PUBLIC_PRIVY_APP_ID` | Privy app id. Blank = injected/MetaMask fallback |
 | `NEXT_PUBLIC_SITE_URL` | Public app URL used by the QR card and share link (default `http://localhost:3000`) |
 | `NEXT_PUBLIC_CLAW_MACHINE_MAINNET` | ClawMachine address on Monad mainnet (143) |
 | `NEXT_PUBLIC_CLAW_MACHINE_TESTNET` | ClawMachine address on Monad testnet (10143) |
-| `NEXT_PUBLIC_USDC_TESTNET` | Testnet MockUSDC address |
+| `NEXT_PUBLIC_USDC_TESTNET` | Testnet MockUSDC address (has `faucet()`) |
+| `NEXT_PUBLIC_BACKEND_URL` | Optional Ayush backend base URL, no trailing slash |
 | `NEXT_PUBLIC_DEMO_MODE` | Set to `mock` to simulate pulls without a chain |
+| `PYTH_API_KEY` | **Server-only.** Pyth Hermes API key used by `/api/price-update` |
+| `PYTH_HERMES_URL` | Optional Hermes base override (default `https://pyth.dourolabs.app/hermes`) |
 
 `NEXT_PUBLIC_*` values are inlined at build time. Restart the dev server (or
-rebuild) after changing them.
+rebuild) after changing them. `PYTH_API_KEY` must never be prefixed with
+`NEXT_PUBLIC_`; it is read only inside the server route and never logged.
 
-Addresses live in `src/config/deployments.ts`. Anything not set via env falls
-back to the values in that file (zero placeholders until deployment). The
-mainnet USDC and xStock addresses are the canonical Monad mainnet deployments.
+Mainnet USDC is the canonical constant
+`0x754704Bc059F8C67012fEd69BC8A327a5aafb603` (6 decimals), so mainnet only
+needs `NEXT_PUBLIC_CLAW_MACHINE_MAINNET`. Testnet needs both the machine and
+the MockUSDC address.
 
 After deploying contracts, copy the addresses from
-`contracts/deployments/monad-testnet.json` (or `monad-mainnet.json`) into the
-matching `NEXT_PUBLIC_*` variables:
+`contracts/deployments/monad-testnet.json` (or `monad-mainnet.json`):
 
 ```bash
 jq -r '.clawMachine, .usdc' contracts/deployments/monad-testnet.json
 ```
-
-Testnet needs both `NEXT_PUBLIC_CLAW_MACHINE_TESTNET` and
-`NEXT_PUBLIC_USDC_TESTNET`. Mainnet only needs
-`NEXT_PUBLIC_CLAW_MACHINE_MAINNET` (USDC is canonical).
-
-`src/abi/ClawMachine.json` is a direct copy of
-`contracts/abi/ClawMachine.json`; `src/abi/clawMachine.ts` contains the same ABI
-as a typed `as const` export (plus the `PullStatus` enum). It includes the
-audited contract's `refundStuckPull` and `PullRefunded`, and the current
-`callbackGasLimit` default of 1.2M, so the UI reads the live entropy fee
-(~1.48 MON on mainnet) via `getFee()`.
-
-When the contracts worker regenerates the ABI, copy the JSON over and regenerate
-the TS export from it.
-
-## Wallet sign-in (Privy)
-
-Create an app at [dashboard.privy.io](https://dashboard.privy.io), then set
-`NEXT_PUBLIC_PRIVY_APP_ID`. The id is public and is embedded in the client
-bundle.
-
-The app configures Privy with:
-
-- login methods: **email**, **Google**, and **external wallets** (MetaMask)
-- embedded wallets: `createOnLogin: "users-without-wallets"` (email/Google
-  users get a wallet automatically)
-- `supportedChains` and `defaultChain` from the viem Monad definitions, ordered
-  by `NEXT_PUBLIC_DEFAULT_NETWORK`
-
-In the Privy dashboard, enable Email, Google, and Wallet login, and add your
-origins (for example `http://localhost:3000` and the Vercel production domain).
-Privy rejects unknown origins at runtime even when the build succeeds.
-
-If `NEXT_PUBLIC_PRIVY_APP_ID` is missing or is not a 25-character app id, the app
-falls back to the injected + MetaMask connectors. Mock mode also uses the
-fallback, so `NEXT_PUBLIC_DEMO_MODE=mock` never opens a login modal.
-
-Set `NEXT_PUBLIC_SITE_URL` to the public deployment URL (for example
-`https://clawmachine.vercel.app`). The QR card encodes it and the share button
-links back to it. Locally it defaults to `http://localhost:3000`.
-
-## Mock mode
-
-```bash
-cd web
-NEXT_PUBLIC_DEMO_MODE=mock bun run dev
-```
-
-No wallet, RPC or contract is needed. Pulls resolve after a 1.5 s draw with the
-same 2% legendary odds as the contract, the wallet panel shows simulated
-balances, and recent pulls update in memory. This is the fastest way to work on
-UI and to demo the flow offline.
 
 ## Networks
 
@@ -119,114 +75,177 @@ UI and to demo the flow offline.
 | USDC | canonical `0x7547…b603` (6 decimals) | MockUSDC, public `faucet()` |
 | Stocks | canonical xStocks (18 decimals) | MockStocks (18 decimals) |
 
-The app opens on `NEXT_PUBLIC_DEFAULT_NETWORK`. If the connected wallet is on a
-different chain, a banner offers a one-click network switch. On testnet the
-wallet panel shows **Get test USDC** (calls `MockUSDC.faucet()` and mints 100
-USDC) and a link to the Monad MON faucet.
+The app opens on `NEXT_PUBLIC_DEFAULT_NETWORK` (mainnet by default). If the
+connected wallet is on a different chain, a banner offers a one-click network
+switch. On testnet the wallet panel shows **Get test USDC** (calls
+`MockUSDC.faucet()` and mints 100 USDC) and a link to the Monad MON faucet.
+
+## Contract interface
+
+`src/abi/clawMachine.ts` is the typed ABI (`src/abi/ClawMachine.json` is
+generated from it) and targets Ayush's contract from PR #21, including the
+pending contracts fix:
+
+- `pull(bytes32 userRandomNumber, bytes[] priceUpdateData)` payable
+- `getTotalFee(bytes[] priceUpdateData)` = Pyth update fee + Entropy fee
+- `getPullBasicData`, `getPullPriceSnapshot`, `getSupportedTokens`, `tokenInfo`
+- `getOwedBalance`, `withdrawOwed`
+- `callbackGasLimit()` / `setCallbackGasLimit(uint32)`
+- `_entropyCallback(...)` (the IEntropyConsumer entry point; the web never calls it)
+
+The retired interface (`pull()` with no args, `getFee`, `getRecentPulls`,
+`getPull`, `getStocks`, `owed`, keeper `setPrices`) is not used anywhere.
+
+`tokenInfo(token)` returns `(pythFeedId, decimals, supported)`. Pyth feed ids
+are read through it, which is why the price route works for any token the owner
+adds.
 
 ## How a pull works
 
-0. The header signs in through Privy (email, Google, or MetaMask). Privy creates
-   an embedded wallet for users who do not have one. Without a Privy app id the
-   same button connects an injected wallet instead.
-1. `useMachine()` reads the machine config and inventory every 3 s through
-   contract views (`getRecentPulls` + `getPull` + `getPullPayout` for history —
-   never `eth_getLogs`, which public Monad RPCs limit).
-2. The primary button reads the wallet's USDC allowance. If it is below one
-   pull, `usePull()` first approves five pulls of USDC (`pullPrice * 5`), then
-   submits `pull()` with `value: getFee()`.
-3. The pull id is decoded from the `PullRequested` log in the receipt. The hook
-   polls `getPull(id)` every 500 ms. After 60 s it shows the explorer link and
-   keeps polling; the entropy fee is re-read immediately before `pull()` (not
-   cached across a slow approval).
-4. On `Resolved`, it loads `getPullPayout(id)` and renders the stock symbols,
-   amounts and USD value. Tokens are delivered in the callback; if a token
-   blocks the transfer, the contract records it in `owed(player, token)` and
-   the **Claimable balance** panel retries it with `withdrawOwed()`.
-5. If a pull is still pending after the on-chain `STUCK_PULL_TIMEOUT` (10
-   minutes), the pending card offers **Refund pull**, which calls
-   `refundStuckPull(id)` and returns the pull price. The machine polls
-   indefinitely so the refund option is reachable.
+1. `usePull()` calls the server route `GET /api/price-update?chainId=143|10143`.
+   The route reads the machine's feed ids and asks Hermes for a signed update
+   with the server-only `PYTH_API_KEY`. The browser never sees the key.
+2. It reads `getTotalFee(updateData)` right before sending. If the wallet's
+   USDC allowance is below `pullPrice`, it approves the exact `pullPrice`.
+3. It simulates `pull(random32, updateData)` (`random32` from
+   `crypto.getRandomValues`) and sends it with `value = getTotalFee(...)`.
+4. `pullId` and the Entropy `sequenceNumber` are decoded from the
+   `PullRequested` log in the receipt. The UI shows the drawing state.
+5. It polls `PullResolved` for that indexed `pullId` with `getLogs` from the
+   receipt block forward, in chunks of at most **100 blocks**, every 1.5 s for
+   up to 120 s. No `eth_getLogs` range above 100 blocks is ever requested.
+6. The result card shows `stocks` / `amounts` (18-decimal formatting). The USD
+   value is computed from `getPullPriceSnapshot(pullId, token)`.
 
-State machine: `idle → approving → confirming → drawing → revealed | error`.
-The primary button reflects each phase ("Approve USDC", "Confirm in wallet…",
-"Drawing…", "Pull again") and the progress/result is mirrored in an
-`aria-live="polite"` region.
+Reverts are mapped to player-friendly copy: insufficient inventory, insufficient
+fee, stale price, paused machine, user rejection, and low USDC allowance.
 
-## Layout
+The button is **not** gated on `canPull()` or `getInventoryValue()`. Those read
+stored on-chain prices that may be stale, so they can report false or 0 even
+when a pull would succeed. Availability is computed from fresh prices instead:
+inventory USD = sum of `balanceOf(machine)` × fresh Pyth price over the
+supported tokens; the machine is pullable when that value covers
+`pullPrice × legendaryMultiplier + pendingReservations` and it is not paused.
 
-```
-src/
-  abi/            ClawMachine + ERC20/MockUSDC ABIs (as const)
-  app/            App Router page, layout, providers, global styles
-  components/     header, PixelGachaMachine, panels, pull button, balances,
-                  claimable balance, footer, banners
-  config/         chain definitions, deployments, wagmi/Privy config
-  hooks/          useMachine, usePull, useBalances, useFaucet, useOwed
-  lib/            formatting, shared types, mock-mode simulator, pull views
+## Server routes
+
+### `GET /api/price-update?chainId=143|10143`
+
+Reads `getSupportedTokens()` + `tokenInfo()` from the machine, then calls:
+
+```text
+GET https://pyth.dourolabs.app/hermes/v2/updates/price/latest
+    ?ids[]=<feedId>&encoding=hex&parsed=true
+Authorization: Bearer $PYTH_API_KEY
 ```
 
-`PixelGachaMachine` in `src/components/gacha/` renders every pull phase and the
-tear-to-reveal card; `onRevealed` opens the detailed panel result. `GachaResult`
-receives formatted payout amounts, USD strings and the explorer transaction URL
-from `usePull` via `src/lib/pull-view.ts`.
+Response:
+
+```json
+{
+  "updateData": ["0x..."],
+  "prices": [
+    {
+      "token": "0x...",
+      "symbol": "TSLAx",
+      "feedId": "0x...",
+      "price": "42125000000",
+      "expo": -8,
+      "priceUsd6": "421250000",
+      "publishTime": 1793780300
+    }
+  ]
+}
+```
+
+`binary.data` is an array; every element becomes one `bytes` entry of
+`priceUpdateData` with a `0x` prefix. Errors are JSON with a useful status:
+`500 PRICE_KEY_MISSING`, `401/403 HERMES_NOT_ENTITLED`, `429 HERMES_RATE_LIMITED`,
+`502 HERMES_ERROR`, `503 MACHINE_NOT_CONFIGURED / NO_TOKENS`.
+
+The API key is never logged and never returned.
+
+### `GET /api/feed?chainId=143|10143`
+
+Scans back ~1,500 blocks in chunks of at most 100, returns the last 20
+`PullResolved` events newest first, and caches the result in memory for 5 s per
+chain. Each pull includes the player, rarity, stock addresses/amounts, tx hash,
+block number and resolved timestamp.
+
+If `NEXT_PUBLIC_BACKEND_URL` is set, the client also reads the connected
+player's history from Ayush's backend (`GET /players/:address/pulls`). That
+backend has no global feed route, so on-chain events remain the source for the
+global live feed. The user's own pull is inserted immediately, before the next
+poll.
+
+## Panels
+
+- **Odds & EV** is computed from contract parameters: common payout =
+  `pullPrice × commonPayoutBps / 10000`, legendary payout =
+  `pullPrice × legendaryMultiplier`, and the EV weights use
+  `legendaryRarityBps`. There is no hardcoded 0.9154 or "$10".
+- **Live feed** merges `PullResolved` events with the player's own pull.
+- **Claimable balance** uses `getOwedBalance(player)` and `withdrawOwed()`.
+- Footer copy: “Prices: Pyth price feeds. Randomness: Pyth Entropy.”
+
+## Mock mode
+
+```bash
+cd web
+NEXT_PUBLIC_DEMO_MODE=mock bun run dev
+```
+
+No wallet, RPC or contract is needed. Pulls resolve after a 1.5 s draw with the
+same 2% legendary odds as the contract, the wallet panel shows simulated
+balances, and the feed updates in memory. The mock uses TSLAx only to match the
+launch machine. This is the fastest way to work on UI and to demo offline.
 
 ## Panels preview
 
 `/preview/panels` renders every result/feed/share panel against realistic mock
-data, including the loading, empty and error states. Run `bun run dev` and open
-<http://localhost:3000/preview/panels>. The route is a static preview: it never
-touches the chain.
+data, including loading, empty and error states. `/preview` steps the pixel
+machine through every phase. Both routes are static and never touch the chain.
 
-The panels live in `src/components/panels` and are presentational. They take
-plain props, contain no wagmi or RPC calls, and can be dropped anywhere:
+Panels live in `src/components/panels` and are presentational: plain props, no
+wagmi or RPC calls.
 
-```tsx
-import {
-  LiveFeed,
-  OddsPanel,
-  QrCard,
-  ResultCard,
-  ShareButton,
-  type FeedItem,
-  type PanelPayout,
-} from "@/components/panels";
-```
+## Wallet sign-in (Privy)
 
-| Component | Use |
-| --- | --- |
-| `ResultCard` | Resolved pull: rarity badge, per-stock payout rows, total USD, explorer link, pull-again and share-to-X actions. |
-| `OddsPanel` | 98/2 odds, computed EV and house edge, inventory and total pulls. Shows a skeleton while `loading`. |
-| `LiveFeed` | Newest-first ring-buffer feed (`FeedItem[]`), shortened addresses, relative time, legendary highlight, explorer links. Accepts `loading` and `error`. |
-| `ShareButton` | Opens an X intent in a new tab. Pass `text` and `url`; an empty `url` falls back to the current origin after hydration. Optional `label` defaults to "Share my pull". |
-| `QrCard` | Large high-contrast QR of the live URL. The QR is generated locally with `qrcode` (no external image service). |
+Create an app at [dashboard.privy.io](https://dashboard.privy.io), then set
+`NEXT_PUBLIC_PRIVY_APP_ID` (exactly 25 characters). In the Privy dashboard
+enable Email, Google, and Wallet login, and add your origins (for example
+`http://localhost:3000` and the Vercel production domain). Privy rejects
+unknown origins at runtime even when the build succeeds.
 
-All USD values and token amounts are pre-formatted strings (`PanelPayout.usd`,
-`valueUsd`), so the calling hooks decide the precision. `explorerBase` should be
-`https://monadscan.com` on mainnet or `https://testnet.monadscan.com` on
-testnet.
+If the id is missing or invalid, the app falls back to injected + MetaMask
+connectors. Mock mode also uses the fallback, so `NEXT_PUBLIC_DEMO_MODE=mock`
+never opens a login modal.
 
 ## Deploying to Vercel
 
 - Root directory: `web`
 - Framework preset: Next.js
 - Package manager: Bun (`bun install`, `bun run build`)
-- Add the environment variables from the table above in Project Settings,
-  including `NEXT_PUBLIC_PRIVY_APP_ID`, `NEXT_PUBLIC_SITE_URL` and the Vercel
-  domain as a Privy allowed origin.
+- Add every variable from the table above in Project Settings, including
+  `PYTH_API_KEY` (server-only) and `NEXT_PUBLIC_SITE_URL`.
+- Add the Vercel domain as a Privy allowed origin.
 
 ## Troubleshooting
 
-- **Sign-in modal fails to load** — check that the Privy app id is the full
-  25-character id and that the current origin is allowed in the Privy dashboard.
-- **"Machine not deployed"** — set the ClawMachine (and testnet USDC) env vars
+- **“Price feed offline”** — `/api/price-update` could not read the machine or
+  Hermes. Check that the machine address is set, `PYTH_API_KEY` is present in
+  the server environment, and the key is entitled to the machine's feeds.
+- **`HERMES_NOT_ENTITLED`** — the key is not entitled to one of the feed ids
+  returned by `tokenInfo`. The launch key is entitled only to TSLA/USD.
+- **“Machine not deployed”** — set the ClawMachine (and testnet USDC) env vars
   for the selected network and restart/rebuild. The app shows an explicit
-  not-deployed notice with the required env names and a mock-mode command; it
-  never reads a zero address.
-- **"Not enough USDC"** — on testnet use **Get test USDC**; on mainnet top up
+  not-deployed notice with the required env names; it never reads a zero
+  address.
+- **“Not enough USDC”** — on testnet use **Get test USDC**; on mainnet top up
   USDC in the connected wallet.
 - **Wrong network banner** — click the switch button; the app reads state from
   the selected deployment chain even while the wallet is elsewhere.
-- **Pull stuck in "Drawing"** — entropy callbacks usually land in a few
-  seconds. After 60 s the explorer link appears; the page keeps polling, and
-  after 10 minutes the pending card offers **Refund pull**.
+- **Pull stuck in “Drawing”** — Entropy callbacks usually land in a few
+  seconds. The hook polls for 120 s and then points at the explorer.
+- **Live feed empty** — the feed only scans ~1,500 blocks (~10 minutes on
+  Monad). An empty feed shortly after deployment is expected.
