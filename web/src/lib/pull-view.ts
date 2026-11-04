@@ -73,6 +73,15 @@ export function toPanelPayouts(
   );
 }
 
+/** Snapshot value, falling back to fresh machine prices if the snapshot is 0. */
+export function resultValueUsd6(result: PullResult, machine: MachineSnapshot): bigint {
+  if (result.valueUsd6 > 0n) return result.valueUsd6;
+  return result.stocks.reduce((total, stock) => {
+    const value = usd6ForAmount(stock.amount, 18, stock.address, machine);
+    return value === undefined ? total : total + value;
+  }, 0n);
+}
+
 export function toGachaResult(
   result: PullResult,
   machine: MachineSnapshot,
@@ -92,7 +101,7 @@ export function toGachaResult(
     pullId: result.pullId.toString(),
     legendary: result.legendary,
     payouts,
-    valueUsd: usdPlain(result.valueUsd6),
+    valueUsd: usdPlain(resultValueUsd6(result, machine)),
     explorerUrl,
   };
 }

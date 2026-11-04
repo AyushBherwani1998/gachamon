@@ -47,7 +47,7 @@ export function BalancesPanel() {
               <p className="retro mb-2 text-[8px] text-muted-foreground">xSTOCKS</p>
               {balances.stocks.length === 0 ? (
                 <p className="text-[11px] text-muted-foreground">
-                  {IS_DEMO_MODE ? "—" : "Stocks appear once the machine is deployed."}
+                  {IS_DEMO_MODE ? "—" : "No supported xStocks yet."}
                 </p>
               ) : (
                 <div className="flex flex-col gap-2">

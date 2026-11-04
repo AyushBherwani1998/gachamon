@@ -168,6 +168,43 @@
     ]
   },
   {
+    "type": "event",
+    "name": "CallbackGasLimitUpdated",
+    "inputs": [
+      {
+        "name": "oldLimit",
+        "type": "uint32",
+        "indexed": false
+      },
+      {
+        "name": "newLimit",
+        "type": "uint32",
+        "indexed": false
+      }
+    ]
+  },
+  {
+    "type": "event",
+    "name": "PullRefunded",
+    "inputs": [
+      {
+        "name": "pullId",
+        "type": "uint256",
+        "indexed": true
+      },
+      {
+        "name": "player",
+        "type": "address",
+        "indexed": true
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "indexed": false
+      }
+    ]
+  },
+  {
     "type": "function",
     "name": "pull",
     "stateMutability": "payable",
@@ -237,6 +274,30 @@
     "outputs": [
       {
         "name": "",
+        "type": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "function",
+    "name": "canPull",
+    "stateMutability": "view",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool"
+      }
+    ]
+  },
+  {
+    "type": "function",
+    "name": "getInventoryValue",
+    "stateMutability": "view",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "totalValueUSDC",
         "type": "uint256"
       }
     ]
@@ -599,7 +660,7 @@
     "stateMutability": "nonpayable",
     "inputs": [
       {
-        "name": "newCallbackGasLimit",
+        "name": "newLimit",
         "type": "uint32"
       }
     ],
@@ -628,6 +689,18 @@
     "inputs": [
       {
         "name": "amount",
+        "type": "uint256"
+      }
+    ],
+    "outputs": []
+  },
+  {
+    "type": "function",
+    "name": "refundStuckPull",
+    "stateMutability": "nonpayable",
+    "inputs": [
+      {
+        "name": "pullId",
         "type": "uint256"
       }
     ],

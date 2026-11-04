@@ -67,17 +67,6 @@ export function useBalances(): BalanceSnapshot {
     return onchain ? [...onchain] : [];
   }, [tokensRead.data]);
 
-  const infoRead = useReadContracts({
-    contracts: stockAddresses.map((token) => ({
-      address: deployment.clawMachine,
-      abi: clawMachineAbi,
-      functionName: "tokenInfo" as const,
-      args: [token] as const,
-      chainId: deployment.chainId,
-    })),
-    query: { enabled: enabled && stockAddresses.length > 0, staleTime: 60_000 },
-  });
-
   const balanceContracts = useMemo(
     () =>
       stockAddresses.map((token) => ({
@@ -134,7 +123,6 @@ export function useBalances(): BalanceSnapshot {
       void usdcRead.refetch();
       void allowanceRead.refetch();
       void tokensRead.refetch();
-      void infoRead.refetch();
       void balancesRead.refetch();
       void symbolsRead.refetch();
     },

@@ -261,10 +261,10 @@ export function PackTear({
   const cardSrc = result.legendary
     ? "/sprites/card_legendary.png"
     : "/sprites/card_rare.png";
-  const paidInUsdc = result.payouts.length === 0;
+  const noPayout = result.payouts.length === 0;
   const announcement = torn
-    ? paidInUsdc
-      ? `${tierName} pack. Paid about $${result.valueUsd} in USDC.`
+    ? noPayout
+      ? `${tierName} pack. No stock payout was recorded.`
       : `${tierName} pack. You got ${result.payouts
           .map((payout) => `${payout.amount} ${payout.symbol}`)
           .join(", ")}, about $${result.valueUsd}.`
@@ -308,8 +308,8 @@ export function PackTear({
 
           <div className="gm-revealText">
             <p className="gm-revealTier">{tierName}</p>
-            {paidInUsdc ? (
-              <p className="gm-revealSymbol">Paid in USDC</p>
+            {noPayout ? (
+              <p className="gm-revealAmount">No stock payout recorded</p>
             ) : (
               <ul className="gm-revealList">
                 {result.payouts.map((payout, index) => (
@@ -320,7 +320,7 @@ export function PackTear({
                 ))}
               </ul>
             )}
-            <p className="gm-revealValue">${result.valueUsd}</p>
+            {noPayout ? null : <p className="gm-revealValue">${result.valueUsd}</p>}
             <button
               ref={continueRef}
               type="button"

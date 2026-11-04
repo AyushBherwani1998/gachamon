@@ -246,6 +246,13 @@ export async function GET(request: NextRequest) {
       "HERMES_EMPTY"
     );
   }
+  if (prices.length !== tokenInfos.length) {
+    return jsonError(
+      502,
+      "Pyth Hermes did not return a parsed price for every machine feed.",
+      "HERMES_INCOMPLETE"
+    );
+  }
 
   return NextResponse.json(
     { updateData, prices },

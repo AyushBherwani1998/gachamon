@@ -27,10 +27,10 @@ import { useFeed } from "@/hooks/use-feed";
 import { useMachine } from "@/hooks/use-machine";
 import { usePull } from "@/hooks/use-pull";
 import { formatMon, formatUsd6 } from "@/lib/format";
-import { toGachaResult, toPanelPayouts, usdPlain } from "@/lib/pull-view";
+import { resultValueUsd6, toGachaResult, toPanelPayouts, usdPlain } from "@/lib/pull-view";
 import type { PullPhase } from "@/lib/types";
 
-const BUSY_PHASES: PullPhase[] = ["approving", "confirming", "drawing"];
+const BUSY_PHASES: PullPhase[] = ["preparing", "approving", "confirming", "drawing"];
 
 const SITE_URL =
   process.env.NEXT_PUBLIC_SITE_URL?.trim() || "http://localhost:3000";
@@ -77,6 +77,7 @@ export default function Home() {
   const usdcReady = demo || isDeployed(deployment.usdc);
   const machineReady = demo || (machine.isDeployed && machine.pullable);
   const pullPriceLabel = `Pull · ${usdPlain(machine.pullPrice ?? 1_000_000n)} USDC`;
+  const gachaPhase = pull.phase === "preparing" ? "confirming" : pull.phase;
 
   const gachaResult = pull.result
     ? toGachaResult(
@@ -88,6 +89,7 @@ export default function Home() {
   const panelPayouts = pull.result
     ? toPanelPayouts(pull.result.stocks, machine, pull.result.valueUsd6)
     : [];
+  const resultValue = pull.result ? resultValueUsd6(pull.result, machine) : undefined;
   // The chain knows the stock before the player tears the pack, so their own
   // pull stays out of the feed until then.
   const sealedPullId = pull.result && !revealed ? pull.result.pullId.toString() : null;
@@ -99,6 +101,7 @@ export default function Home() {
       return pull.phase === "revealed" ? "Pull again" : pullPriceLabel;
     }
     if (busy) {
+      if (pull.phase === "preparing") return "Preparing pull…";
       if (pull.phase === "approving") return "Approving USDC…";
       if (pull.phase === "confirming") return "Confirm in wallet…";
       return pull.slow ? "Still drawing…" : "Drawing…";
@@ -174,6 +177,7 @@ export default function Home() {
   };
 
   const liveMessage = useMemo(() => {
+    if (pull.phase === "preparing") return "Fetching a fresh Pyth price update.";
     if (pull.phase === "approving") return "Approving USDC. Confirm the approval in your wallet.";
     if (pull.phase === "confirming") return "Confirm the pull transaction in your wallet.";
     if (pull.phase === "drawing") {
@@ -184,12 +188,15 @@ export default function Home() {
     if (pull.phase === "revealed" && pull.result) {
       // The stock stays secret until the pack is torn.
       if (!revealed) return "";
+      if (pull.result.stocks.length === 0) {
+        return "Pull resolved. No stock payout was recorded.";
+      }
       const symbols = pull.result.stocks.map((stock) => stock.symbol).join(", ");
-      return `${pull.result.legendary ? "Legendary" : "Rare"} pull! You received ${symbols} worth ${formatUsd6(pull.result.valueUsd6)}.`;
+      return `${pull.result.legendary ? "Legendary" : "Rare"} pull! You received ${symbols} worth ${formatUsd6(resultValue ?? 0n)}.`;
     }
     if (pull.phase === "error" && pull.error) return `Pull failed: ${pull.error}`;
     return "";
-  }, [pull.phase, pull.result, pull.error, pull.slow, revealed]);
+  }, [pull.phase, pull.result, pull.error, pull.slow, resultValue, revealed]);
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -203,7 +210,7 @@ export default function Home() {
           <section className="flex flex-col items-center gap-4 lg:order-2">
             <div className="mx-auto w-full min-w-0 max-w-[480px]">
               <PixelGachaMachine
-                phase={pull.phase}
+                phase={gachaPhase}
                 result={gachaResult}
                 onRevealed={() => setRevealed(true)}
               />
@@ -251,7 +258,7 @@ export default function Home() {
                     <ResultCard
                       legendary={pull.result.legendary}
                       payouts={panelPayouts}
-                      valueUsd={formatUsd6(pull.result.valueUsd6)}
+                      valueUsd={formatUsd6(resultValue ?? 0n)}
                       explorerUrl={
                         pull.txHash
                           ? explorerTx(deployment.key, pull.txHash)
@@ -287,9 +294,11 @@ export default function Home() {
               items={feedItems}
               loading={feed.loading}
               error={
-                notDeployed
-                  ? `The Gachamon machine is not deployed on ${deployment.name} yet.`
-                  : feed.error ?? machine.error ?? undefined
+                feed.items.length > 0
+                  ? undefined
+                  : notDeployed
+                    ? `The Gachamon machine is not deployed on ${deployment.name} yet.`
+                    : feed.error ?? undefined
               }
               explorerBase={deployment.explorerUrl}
             />
@@ -297,7 +306,7 @@ export default function Home() {
 
           <aside className="flex min-w-0 flex-col gap-5 lg:order-3">
             <OddsPanel
-              legendaryBps={machine.legendaryBps ?? 200}
+              legendaryBps={machine.legendaryBps}
               commonUsd={machine.commonPayout === undefined ? "—" : formatUsd6(machine.commonPayout)}
               legendaryUsd={
                 machine.legendaryPayout === undefined ? "—" : formatUsd6(machine.legendaryPayout)
@@ -312,7 +321,7 @@ export default function Home() {
               }
               totalPulls={machine.totalPulls?.toLocaleString("en-US")}
               loading={machine.isDeployed && machine.isLoading}
-              statusLabel={notDeployed ? "Offline" : undefined}
+              statusLabel={notDeployed || machine.error ? "Offline" : undefined}
             />
 
             <BalancesPanel />

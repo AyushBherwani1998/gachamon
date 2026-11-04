@@ -130,12 +130,13 @@ export function usePull(): PullState {
     setPullId(null);
     setTxHash(null);
     setSlow(false);
+    setPhase("preparing");
 
     try {
       // 1. Fresh signed Pyth update from the server proxy (key stays server-side).
       const priceUpdate = await fetchPriceUpdate(deployment.chainId);
       if (runId.current !== currentRun) return;
-      const updateData = priceUpdate.updateData;
+      let updateData = priceUpdate.updateData;
 
       const [pullPrice, allowance] = await Promise.all([
         publicClient.readContract({
@@ -152,6 +153,7 @@ export function usePull(): PullState {
       ]);
 
       // 2. Approve the exact pull price when the allowance is short.
+      let approved = false;
       if (allowance < pullPrice) {
         if (runId.current !== currentRun) return;
         setPhase("approving");
@@ -166,10 +168,19 @@ export function usePull(): PullState {
           hash: approveHash,
         });
         if (approveReceipt.status !== "success") throw new Error("USDC approval reverted.");
+        approved = true;
       }
 
       if (runId.current !== currentRun) return;
       setPhase("confirming");
+
+      // An approval can take minutes; Pyth updates are only valid for the
+      // contract's maxPriceAge (60 s by default). Refresh after approval.
+      if (approved) {
+        const refreshed = await fetchPriceUpdate(deployment.chainId);
+        if (runId.current !== currentRun) return;
+        updateData = refreshed.updateData;
+      }
 
       // 3. Read the total fee immediately before sending; the first read may be
       // stale after a slow approval. Simulate, then send pull(random, update).

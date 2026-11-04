@@ -167,7 +167,8 @@ export function PixelGachaMachine({
               />
             </span>
             <span className="gm-trayValue">
-              <strong>{primary?.symbol ?? "USDC"}</strong>${result.valueUsd}
+              <strong>{primary?.symbol ?? "No payout"}</strong>
+              {primary ? `$${result.valueUsd}` : null}
             </span>
           </div>
         ) : null}

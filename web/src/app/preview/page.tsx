@@ -15,13 +15,13 @@ const RESULTS = {
   rare: {
     pullId: "2481",
     legendary: false,
-    payouts: [{ symbol: "NVDAx", amount: "0.0036", usd: "0.73" }],
+    payouts: [{ symbol: "TSLAx", amount: "0.0017", usd: "0.73" }],
     valueUsd: "0.73",
   },
   legendary: {
     pullId: "2482",
     legendary: true,
-    payouts: [{ symbol: "TSLAx", amount: "0.0250", usd: "10.00" }],
+    payouts: [{ symbol: "TSLAx", amount: "0.0237", usd: "10.00" }],
     valueUsd: "10.00",
   },
   "multi-stock": {
@@ -33,7 +33,7 @@ const RESULTS = {
     ],
     valueUsd: "10.00",
   },
-  "usdc-only": {
+  "no-payout": {
     pullId: "2484",
     legendary: false,
     payouts: [],

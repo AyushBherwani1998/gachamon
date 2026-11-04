@@ -24,7 +24,6 @@ export interface OwedBalance {
   address: Address;
   symbol: string;
   amount: bigint;
-  decimals: number;
 }
 
 /**
@@ -78,7 +77,7 @@ export function useOwed() {
       const symbol =
         pick<string>(symbolsRead.data as readonly ReadResult[] | undefined, index) ??
         shortAddress(token);
-      return [{ address: token, symbol, amount, decimals: 18 }];
+      return [{ address: token, symbol, amount }];
     });
   }, [stockAddresses, amounts, symbolsRead.data]);
 

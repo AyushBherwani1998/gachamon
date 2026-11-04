@@ -55,6 +55,7 @@ export interface MachineSnapshot {
 
 export type PullPhase =
   | "idle"
+  | "preparing"
   | "approving"
   | "confirming"
   | "drawing"
