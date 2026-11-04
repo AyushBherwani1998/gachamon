@@ -9,6 +9,9 @@ test:
 test-gas:
 	forge test --match-test "Gas" -vv
 
+test-fork:
+	FORK_TEST=true forge test --match-path test/EntropyFork.t.sol -vv
+
 fmt:
 	forge fmt
 

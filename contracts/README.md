@@ -80,6 +80,7 @@ Useful targets:
 make build       # forge build
 make test        # forge test -vv
 make test-gas    # gas logs for the entropy callback
+make test-fork   # live Monad testnet entropy request (needs FORK_TEST)
 make abi         # regenerate abi/*.json
 make fmt         # forge fmt
 ```
