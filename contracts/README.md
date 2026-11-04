@@ -344,6 +344,7 @@ Frontend/keeper should import `abi/ClawMachine.json`. Read state through views (
   `msg.sender == entropy`.
 - The keeper is trusted for prices. `maxPriceAge` bounds how long a stale price can be used.
 - The owner is trusted to fund inventory, keep USDC for shortfalls, and not drain inventory while
-  pulls are pending.
+  pulls are pending. The owner can also change `legendaryBps` / payout values between a request and
+  its callback, so use a multisig in production.
 - Entropy callbacks can be re-delivered; unknown or already-resolved sequence numbers are ignored.
 - Failed transfers never revert the callback; they are paid later from `owed`.
