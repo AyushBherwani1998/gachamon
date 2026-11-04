@@ -148,6 +148,47 @@
   }
 }
 
+/* Phone menu. Leaving is quicker than arriving, since the user is done with it. */
+.menu-panel[data-state="open"] {
+  animation: menu-slide-in 280ms cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+.menu-panel[data-state="closed"] {
+  animation: menu-slide-out 180ms cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+.menu-overlay[data-state="open"] {
+  animation: menu-fade-in 200ms ease-out both;
+}
+
+.menu-overlay[data-state="closed"] {
+  animation: menu-fade-out 180ms ease-out both;
+}
+
+@keyframes menu-slide-in {
+  from {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes menu-slide-out {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes menu-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes menu-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
 @keyframes machine-shake {
   0%,
   100% {

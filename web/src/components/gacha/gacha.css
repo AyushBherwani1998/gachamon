@@ -64,6 +64,23 @@
   right: 16px;
 }
 
+/* Too narrow for the toggle beside the tallest machine (320px, plus 52px each
+   side), so it takes the end of the status line, which keeps text clear of it.
+   This follows the column, not the viewport: the same width occurs on phones
+   and in the desktop grid. */
+@container gm-root (max-width: 424px) {
+  .gm-root > .gm-soundToggle {
+    top: auto;
+    bottom: 0;
+  }
+
+  .gm-root .gm-statusRow {
+    width: 100%;
+    min-height: 44px;
+    padding-inline: 48px;
+  }
+}
+
 /* ---------------------------------------------------------------- machine */
 
 .gm-root {
@@ -72,6 +89,7 @@
   width: 100%;
   flex-direction: column;
   align-items: center;
+  container: gm-root / inline-size;
 }
 
 .gm-machine {
@@ -227,6 +245,18 @@
   }
 }
 
+/* Very short phones: drop the machine one whole-number sprite scale. */
+@media (max-height: 620px) {
+  .gm-machine {
+    width: 160px;
+    height: 208px;
+  }
+
+  .gm-tray {
+    max-width: 160px;
+  }
+}
+
 .gm-statusRow {
   display: flex;
   min-height: 34px;
@@ -297,6 +327,8 @@
   display: grid;
   place-items: center;
   overflow: hidden;
+  /* An open modal menu disables pointer events on body; the pack must still tear. */
+  pointer-events: auto;
   /* Opaque on purpose: the feed behind can already name the stock. */
   background-color: var(--tint);
   background-image:

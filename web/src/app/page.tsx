@@ -15,6 +15,7 @@ import {
   ResultCard,
   ShareButton,
 } from "@/components/panels";
+import { MenuSection, MobileMenu } from "@/components/mobile-menu";
 import { OwedPanel } from "@/components/owed-panel";
 import { PullButton } from "@/components/pull-button";
 import { TxLink } from "@/components/tx-link";
@@ -199,11 +200,79 @@ export default function Home() {
     return "";
   }, [pull.phase, pull.result, pull.error, pull.slow, resultValue, revealed]);
 
+  // Each panel appears in the desktop columns or the phone menu, never both on
+  // screen: the columns are hidden below `lg`, and the menu only mounts when open.
+  const liveFeed = (
+    <LiveFeed
+      items={feedItems}
+      loading={feed.loading}
+      error={
+        feed.items.length > 0
+          ? undefined
+          : notDeployed
+            ? `The Gachamon machine is not deployed on ${deployment.name} yet.`
+            : feed.error ?? undefined
+      }
+      explorerBase={deployment.explorerUrl}
+    />
+  );
+  const oddsPanel = (
+    <OddsPanel
+      legendaryBps={machine.legendaryBps}
+      commonUsd={machine.commonPayout === undefined ? "—" : formatUsd6(machine.commonPayout)}
+      legendaryUsd={
+        machine.legendaryPayout === undefined ? "—" : formatUsd6(machine.legendaryPayout)
+      }
+      pullPriceUsd={
+        machine.pullPrice === undefined ? "—" : formatUsd6(machine.pullPrice)
+      }
+      inventoryUsd={
+        machine.inventoryValueUsd6 === undefined
+          ? undefined
+          : formatUsd6(machine.inventoryValueUsd6)
+      }
+      totalPulls={machine.totalPulls?.toLocaleString("en-US")}
+      loading={machine.isDeployed && machine.isLoading}
+      statusLabel={notDeployed || machine.error ? "Offline" : undefined}
+    />
+  );
+  const qrCard = (
+    <QrCard
+      url={SITE_URL}
+      caption={
+        deployment.key === "testnet"
+          ? "Free play on testnet · scan to pull"
+          : "Scan to pull real xStocks"
+      }
+      networkLabel={deployment.key === "testnet" ? "Testnet" : "Mainnet"}
+    />
+  );
+  const shareButton = (
+    <ShareButton
+      text="Tear open a Gachamon pack and win real tokenized stocks on @monad. 1 USDC per pull, verifiable randomness by Pyth. #MonadBlitz @monad_dev @geeky_kartikey"
+      url={SITE_URL}
+      label="Share Gachamon"
+    />
+  );
+
   return (
     <div className="flex min-h-screen flex-col">
       <NetworkBanner />
-      <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-6 sm:px-6">
-        <SiteHeader />
+      <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-4 px-4 py-4 sm:gap-6 sm:px-6 sm:py-6">
+        <SiteHeader
+          menu={
+            <MobileMenu closeWhen={pull.phase === "revealed"}>
+              <MenuSection title="Your wallet" defaultOpen>
+                <BalancesPanel />
+              </MenuSection>
+              <MenuSection title="Live feed">{liveFeed}</MenuSection>
+              <MenuSection title="Odds & EV">{oddsPanel}</MenuSection>
+              <MenuSection title="Scan to play">{qrCard}</MenuSection>
+              {shareButton}
+              <SiteFooter />
+            </MobileMenu>
+          }
+        />
 
         {notDeployed ? <NotDeployedNotice /> : null}
 
@@ -250,6 +319,11 @@ export default function Home() {
               </p>
             </div>
 
+            {/* Owed money stays on the page: it shouldn't wait behind a menu. */}
+            <div className="w-full max-w-xl empty:hidden lg:hidden">
+              <OwedPanel />
+            </div>
+
             {!notDeployed ? (
               <div className="mx-auto flex w-full max-w-xl flex-col gap-4">
                 {pull.phase === "drawing" || pull.phase === "confirming" ? (
@@ -290,61 +364,20 @@ export default function Home() {
             ) : null}
           </section>
 
-          <div className="flex min-w-0 flex-col gap-5 lg:order-1">
-            <LiveFeed
-              items={feedItems}
-              loading={feed.loading}
-              error={
-                feed.items.length > 0
-                  ? undefined
-                  : notDeployed
-                    ? `The Gachamon machine is not deployed on ${deployment.name} yet.`
-                    : feed.error ?? undefined
-              }
-              explorerBase={deployment.explorerUrl}
-            />
-          </div>
+          <div className="hidden min-w-0 flex-col gap-5 lg:order-1 lg:flex">{liveFeed}</div>
 
-          <aside className="flex min-w-0 flex-col gap-5 lg:order-3">
-            <OddsPanel
-              legendaryBps={machine.legendaryBps}
-              commonUsd={machine.commonPayout === undefined ? "—" : formatUsd6(machine.commonPayout)}
-              legendaryUsd={
-                machine.legendaryPayout === undefined ? "—" : formatUsd6(machine.legendaryPayout)
-              }
-              pullPriceUsd={
-                machine.pullPrice === undefined ? "—" : formatUsd6(machine.pullPrice)
-              }
-              inventoryUsd={
-                machine.inventoryValueUsd6 === undefined
-                  ? undefined
-                  : formatUsd6(machine.inventoryValueUsd6)
-              }
-              totalPulls={machine.totalPulls?.toLocaleString("en-US")}
-              loading={machine.isDeployed && machine.isLoading}
-              statusLabel={notDeployed || machine.error ? "Offline" : undefined}
-            />
-
+          <aside className="hidden min-w-0 flex-col gap-5 lg:order-3 lg:flex">
+            {oddsPanel}
             <BalancesPanel />
             <OwedPanel />
-            <QrCard
-              url={SITE_URL}
-              caption={
-                deployment.key === "testnet"
-                  ? "Free play on testnet · scan to pull"
-                  : "Scan to pull real xStocks"
-              }
-              networkLabel={deployment.key === "testnet" ? "Testnet" : "Mainnet"}
-            />
-            <ShareButton
-              text="Tear open a Gachamon pack and win real tokenized stocks on @monad. 1 USDC per pull, verifiable randomness by Pyth. #MonadBlitz @monad_dev @geeky_kartikey"
-              url={SITE_URL}
-              label="Share Gachamon"
-            />
+            {qrCard}
+            {shareButton}
           </aside>
         </main>
 
-        <SiteFooter />
+        <div className="hidden lg:block">
+          <SiteFooter />
+        </div>
       </div>
     </div>
   );
