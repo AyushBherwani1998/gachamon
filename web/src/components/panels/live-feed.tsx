@@ -87,7 +87,7 @@ function FeedRow({
             {player}
           </span>
           {item.legendary ? (
-            <span className="retro shrink-0 bg-amber-300 px-1 py-0.5 text-[7px] leading-none text-amber-950">
+            <span className="retro shrink-0 bg-amber-300 px-1 py-0.5 text-[7px] uppercase leading-none text-amber-950">
               Legendary
             </span>
           ) : null}
