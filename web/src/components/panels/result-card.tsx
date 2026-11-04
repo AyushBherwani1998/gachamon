@@ -153,7 +153,7 @@ export function ResultCard({
               className={cn(
                 "min-h-11 w-full text-[10px] leading-relaxed",
                 "duration-150 ease-out [transition-property:transform,background-color,color,border-color,box-shadow] motion-reduce:transition-none",
-                "active:translate-y-0 active:scale-[0.96] motion-reduce:active:scale-100",
+                "active:translate-y-0 active:scale-[0.96] motion-reduce:active:scale-100 motion-reduce:active:translate-y-0",
                 "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground",
               )}
             >
@@ -171,7 +171,8 @@ export function ResultCard({
                 "inline-flex min-h-11 w-full items-center justify-center gap-2 px-2",
                 "font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground",
                 "underline decoration-dotted underline-offset-4",
-                "transition-colors duration-150 ease-out hover:text-foreground motion-reduce:transition-none",
+                "transition-[transform,color] duration-150 ease-out hover:text-foreground motion-reduce:transition-none",
+                "active:scale-[0.96] motion-reduce:active:scale-100",
                 "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground",
               )}
             >

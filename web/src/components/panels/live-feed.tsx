@@ -70,7 +70,7 @@ function FeedRow({
       )}
     >
       <div className="w-11 shrink-0">
-        <p className="retro text-[7px] uppercase leading-none text-muted-foreground">
+        <p className="retro text-[8px] uppercase leading-none text-muted-foreground">
           Pull
         </p>
         <p className="mt-1.5 font-mono text-xs font-semibold tabular-nums text-foreground">
