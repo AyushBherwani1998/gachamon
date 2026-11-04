@@ -220,7 +220,7 @@ export function OddsPanel({
         </dl>
 
         <div className="grid grid-cols-2 gap-2">
-          <StatCell label="Inventory" value={inventoryUsd} loading={loading} />
+          <StatCell label="Inventory left" value={inventoryUsd} loading={loading} />
           <StatCell label="Pulls so far" value={totalPulls} loading={loading} />
         </div>
 
