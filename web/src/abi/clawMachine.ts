@@ -1,12 +1,14 @@
 /**
- * ClawMachine ABI for Ayush's contract (PR #21) plus the pending contracts fix:
+ * ClawMachine ABI for Ayush's contract (PR #21) plus the Pyth/Entropy contracts
+ * fix (`fix/claw-pyth-entropy`):
  * - pull(userRandomNumber, priceUpdateData) with Pyth price updates
  * - getTotalFee(priceUpdateData) = Pyth update fee + Entropy fee
  * - callbackGasLimit()/setCallbackGasLimit(uint32)
  * - _entropyCallback(...) is the IEntropyConsumer entry point (the web never calls it)
  *
- * Synced from `.agent-context/ClawMachine.abi.ts`. Do not add the retired
- * interface (pull(), getFee(), getRecentPulls, getPull, owed, keeper, setPrices).
+ * Synced from `.agent-context/ClawMachine.abi.ts` and the fixed contract source.
+ * Do not add the retired interface (pull(), getFee(), getRecentPulls, getPull,
+ * owed, keeper, setPrices).
  */
 export const clawMachineAbi = [
   // Events
@@ -80,6 +82,23 @@ export const clawMachineAbi = [
       { name: "newMaxAge", type: "uint256", indexed: false },
     ],
   },
+  {
+    type: "event",
+    name: "CallbackGasLimitUpdated",
+    inputs: [
+      { name: "oldLimit", type: "uint32", indexed: false },
+      { name: "newLimit", type: "uint32", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "PullRefunded",
+    inputs: [
+      { name: "pullId", type: "uint256", indexed: true },
+      { name: "player", type: "address", indexed: true },
+      { name: "amount", type: "uint256", indexed: false },
+    ],
+  },
 
   // Player actions
   {
@@ -121,6 +140,20 @@ export const clawMachineAbi = [
     stateMutability: "view",
     inputs: [{ name: "priceUpdateData", type: "bytes[]" }],
     outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "canPull",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "bool" }],
+  },
+  {
+    type: "function",
+    name: "getInventoryValue",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "totalValueUSDC", type: "uint256" }],
   },
   {
     type: "function",
@@ -337,6 +370,13 @@ export const clawMachineAbi = [
     name: "withdrawTreasury",
     stateMutability: "nonpayable",
     inputs: [{ name: "amount", type: "uint256" }],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "refundStuckPull",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "pullId", type: "uint256" }],
     outputs: [],
   },
   {
