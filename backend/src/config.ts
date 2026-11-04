@@ -56,8 +56,18 @@ export const config = {
   // Gas limits
   maxGasLimit: 500_000n,
   
-  // Pyth Hermes API
-  pythHermesUrl: 'https://hermes.pyth.network/v2/updates/price/latest',
+  // Pyth Hermes API (server-side only: PYTH_API_KEY must never reach the browser)
+  // The Pyth Core upgrade requires an API key on every Hermes request.
+  pythHermesUrl: process.env.PYTH_HERMES_URL || 'https://pyth.dourolabs.app/hermes/v2/updates/price/latest',
+  pythApiKey: process.env.PYTH_API_KEY,
+
+  // Symbols requested when the caller does not pass ?symbols= and the contract
+  // is not configured. Only list feeds the API key is entitled to: requesting
+  // a non-entitled feed makes Hermes reject the whole batch with 403.
+  pythFeeds: (process.env.PYTH_FEEDS || 'TSLAx')
+    .split(',')
+    .map((symbol) => symbol.trim())
+    .filter((symbol) => symbol.length > 0),
 };
 
 export const publicClient = createPublicClient({

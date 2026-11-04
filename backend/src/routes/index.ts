@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { validateAndRelayTransaction } from '../services/relay.js';
 import { getMachineStatus } from '../services/contract.js';
-import { getPriceUpdate } from '../services/pyth.js';
+import { getPriceUpdate, PriceUpdateError } from '../services/pyth.js';
 import { getPullById, getPullsByPlayer, getLeaderboard } from '../db/index.js';
 import { RelayRequest } from '../types/index.js';
 
@@ -50,11 +50,16 @@ app.get('/machine', async (c) => {
 // GET /price-update - Get Pyth price update data
 app.get('/price-update', async (c) => {
   try {
-    const symbols = c.req.query('symbols')?.split(',') || ['TSLAx', 'NVDAx', 'AAPLx', 'SPYx'];
+    const symbolsParam = c.req.query('symbols');
+    const symbols = symbolsParam
+      ? symbolsParam.split(',').map((symbol) => symbol.trim()).filter(Boolean)
+      : undefined;
+
     const priceUpdate = await getPriceUpdate(symbols);
     return c.json(priceUpdate);
   } catch (error: any) {
-    return c.json({ error: error.message || 'Failed to fetch price update' }, 500);
+    const status = error instanceof PriceUpdateError ? error.status : 500;
+    return c.json({ error: error.message || 'Failed to fetch price update' }, status);
   }
 });
 
