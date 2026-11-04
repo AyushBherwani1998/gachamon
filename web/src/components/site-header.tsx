@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/8bit/badge";
+import { Button } from "@/components/ui/8bit/button";
 import { ConnectButton } from "@/components/connect-button";
 import { deployment, IS_DEMO_MODE } from "@/config/deployments";
 import type { ReactNode } from "react";
@@ -37,12 +38,15 @@ export function SiteHeader({ menu }: { menu?: ReactNode }) {
         {IS_DEMO_MODE ? (
           <Badge className="border-amber-500 bg-amber-300 text-black">DEMO</Badge>
         ) : null}
-        <Badge
+        <Button
           variant="outline"
-          className="border-primary bg-primary/10 text-[8px] text-primary"
+          size="sm"
+          className="min-h-11 cursor-default border-primary bg-primary/10 text-primary hover:bg-primary/10"
+          disabled
+          aria-label={`Network: ${deployment.name}`}
         >
           {deployment.name.toUpperCase()}
-        </Badge>
+        </Button>
         {IS_DEMO_MODE ? (
           <Badge className="hidden border-border bg-secondary text-secondary-foreground sm:inline-flex">NO WALLET NEEDED</Badge>
         ) : (

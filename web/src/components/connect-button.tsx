@@ -1,6 +1,7 @@
 "use client";
 
 import { useAccount } from "wagmi";
+import { useState } from "react";
 
 import { useAuthActions } from "@/components/auth-actions";
 import { Button } from "@/components/ui/8bit/button";
@@ -10,13 +11,32 @@ export function ConnectButton() {
   const { address, isConnected } = useAccount();
   const { signIn, signOut, isPending, ready, error, mode } = useAuthActions();
   const privy = mode === "privy";
+  const [copied, setCopied] = useState(false);
+
+  const handleCopyAddress = async () => {
+    if (!address) return;
+    try {
+      await navigator.clipboard.writeText(address);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch (err) {
+      console.error("Failed to copy address:", err);
+    }
+  };
 
   if (isConnected && address) {
     return (
       <div className="flex items-center gap-2">
-        <span className="amount text-[10px] text-muted-foreground sm:text-xs">
-          {shortAddress(address)}
-        </span>
+        <Button
+          variant="outline"
+          size="sm"
+          className="min-h-11"
+          onClick={handleCopyAddress}
+          aria-label={`Copy full address: ${address}`}
+          title={address}
+        >
+          {copied ? "Copied!" : shortAddress(address)}
+        </Button>
         <Button
           variant="outline"
           size="sm"
