@@ -573,6 +573,49 @@ contract ClawMachineTest is Test {
         assertEq(p.valueUsd6, 0);
     }
 
+    function testCallbackSkipsStockWithRevertingBalance() public {
+        RevertingBalanceStock bad = new RevertingBalanceStock();
+
+        address[] memory tokens = new address[](2);
+        tokens[0] = address(bad);
+        tokens[1] = address(tsla);
+
+        ClawMachine secondMachine =
+            new ClawMachine(address(usdc), address(entropy), tokens, TREASURY, address(this));
+
+        uint256[] memory prices = new uint256[](2);
+        prices[0] = 100_000_000;
+        prices[1] = TSLA_PRICE;
+        secondMachine.setPrices(tokens, prices);
+        tsla.mint(address(secondMachine), (INVENTORY_USD6 * 1e18) / TSLA_PRICE);
+
+        vm.prank(PLAYER);
+        usdc.approve(address(secondMachine), type(uint256).max);
+
+        // Find a random number whose round-robin walk starts at the bad stock.
+        bytes32 random;
+        for (uint256 i = 0;; ++i) {
+            random = bytes32(i);
+            if (uint256(keccak256(abi.encode(random, uint256(1)))) % 2 == 0) break;
+        }
+
+        uint256 fee = secondMachine.getFee();
+        vm.prank(PLAYER);
+        uint256 pullId = secondMachine.pull{value: fee}();
+
+        // A reverting balanceOf must not brick the callback.
+        entropy.fulfill(secondMachine.getPull(pullId).sequenceNumber, random);
+
+        (address[] memory payoutStocks,) = secondMachine.getPullPayout(pullId);
+        assertEq(payoutStocks.length, 1, "bad stock skipped");
+        assertEq(payoutStocks[0], address(tsla), "paid from good stock");
+        assertEq(
+            uint256(secondMachine.getPull(pullId).status),
+            uint256(ClawMachine.PullStatus.Resolved),
+            "resolved"
+        );
+    }
+
     function testInventoryValue() public view {
         uint256 expected = 4 * INVENTORY_USD6;
         assertApproxEqAbs(machine.inventoryValueUsd6(), expected, 16, "inventory value");
@@ -657,5 +700,13 @@ contract ClawMachineTest is Test {
         for (uint256 i = 0; i < stockTokens.length; ++i) {
             _drainStock(MockStock(stockTokens[i]), stockPrices[i], keepUsd6 / stockTokens.length);
         }
+    }
+}
+
+contract RevertingBalanceStock is MockStock {
+    constructor() MockStock("Broken xStock", "BROKEN") {}
+
+    function balanceOf(address) public view override returns (uint256) {
+        revert("balanceOf reverted");
     }
 }

@@ -327,7 +327,7 @@ contract ClawMachine is IEntropyConsumer, Ownable, ReentrancyGuard {
         uint256 price = _prices[stock];
         if (price == 0) return (0, 0);
 
-        uint256 balance = IERC20(stock).balanceOf(address(this));
+        uint256 balance = _safeBalanceOf(stock);
         if (balance == 0) return (0, 0);
 
         uint256 available = (balance * price) / STOCK_UNIT;
@@ -357,6 +357,14 @@ contract ClawMachine is IEntropyConsumer, Ownable, ReentrancyGuard {
         if (data.length == 0) return true;
         if (data.length != 32) return false;
         return abi.decode(data, (bool));
+    }
+
+    /// @dev ERC20 balance read that returns 0 instead of reverting the entropy callback.
+    function _safeBalanceOf(address token) private view returns (uint256 balance) {
+        (bool success, bytes memory data) =
+            token.staticcall(abi.encodeWithSelector(IERC20.balanceOf.selector, address(this)));
+        if (!success || data.length != 32) return 0;
+        balance = abi.decode(data, (uint256));
     }
 
     function _pushRecentPull(uint256 pullId) private {
@@ -398,7 +406,7 @@ contract ClawMachine is IEntropyConsumer, Ownable, ReentrancyGuard {
             address stock = _stocks[i];
             uint256 price = _prices[stock];
             if (price == 0) continue;
-            total += (IERC20(stock).balanceOf(address(this)) * price) / STOCK_UNIT;
+            total += (_safeBalanceOf(stock) * price) / STOCK_UNIT;
         }
     }
 

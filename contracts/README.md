@@ -32,7 +32,7 @@ contracts/
 │   ├── mocks/MockStock.sol      testnet xStock, owner mint()
 │   └── pyth/                    vendored Pyth Entropy V2 SDK 2.2.1 (Apache-2.0)
 ├── test/
-│   ├── ClawMachine.t.sol        32 tests incl. payout split, owed path, gas, ring buffer
+│   ├── ClawMachine.t.sol        33 tests incl. payout split, owed path, gas, ring buffer
 │   ├── EntropyFork.t.sol        gated live Monad testnet Entropy request check
 │   └── MockEntropy.sol          test entropy contract
 ├── script/
@@ -63,7 +63,7 @@ forge build
 forge test
 ```
 
-Expected: build succeeds, `32 tests passed, 0 failed`, and 1 skipped (the gated live-fork test).
+Expected: build succeeds, `33 tests passed, 0 failed`, and 1 skipped (the gated live-fork test).
 
 To run the live integration check against the deployed Monad testnet Entropy contract:
 
