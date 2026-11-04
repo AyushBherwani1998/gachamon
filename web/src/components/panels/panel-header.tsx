@@ -24,7 +24,7 @@ export function PanelHeader({
         <p className="retro text-[8px] uppercase leading-relaxed tracking-wider text-muted-foreground">
           {eyebrow}
         </p>
-        <h2 className="retro mt-1.5 text-[11px] leading-relaxed text-foreground sm:text-xs">
+        <h2 className="retro mt-1.5 text-[11px] uppercase leading-relaxed text-foreground sm:text-xs">
           {title}
         </h2>
       </div>

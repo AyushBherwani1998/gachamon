@@ -35,7 +35,15 @@ function XLogo({ className }: { className?: string }) {
  * mounted the component falls back to the current origin so local previews
  * share the right link.
  */
-export function ShareButton({ text, url }: { text: string; url: string }) {
+export function ShareButton({
+  text,
+  url,
+  label = "Share my pull",
+}: {
+  text: string;
+  url: string;
+  label?: string;
+}) {
   const mounted = useIsMounted();
   const target = url || (mounted ? window.location.origin : "");
   const intent = `https://x.com/intent/post?text=${encodeURIComponent(text)}${
@@ -51,7 +59,7 @@ export function ShareButton({ text, url }: { text: string; url: string }) {
       className={cn(
         "relative inline-flex min-h-11 w-full items-center justify-center gap-2",
         "border-2 border-foreground bg-background px-4 py-2",
-        "font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground",
+        "retro text-[10px] leading-relaxed text-foreground",
         "shadow-[3px_3px_0_0_var(--color-foreground)]",
         "transition-[transform,background-color,color,box-shadow] duration-150 ease-out motion-reduce:transition-none",
         "hover:bg-foreground hover:text-background",
@@ -60,7 +68,7 @@ export function ShareButton({ text, url }: { text: string; url: string }) {
       )}
     >
       <XLogo />
-      Share my pull
+      {label}
     </a>
   );
 }

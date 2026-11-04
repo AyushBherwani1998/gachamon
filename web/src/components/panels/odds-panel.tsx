@@ -203,7 +203,7 @@ export function OddsPanel({
         <dl className="space-y-1.5 border-t-2 border-dashed border-foreground/15 pt-3">
           <div className="flex items-baseline justify-between gap-3">
             <dt className="font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
-              EV per pull
+              EV per {pullPriceUsd} pull
             </dt>
             <dd className="font-mono text-sm font-semibold tabular-nums text-emerald-300">
               {loading ? <PanelSkeleton className="h-4 w-14" /> : evLabel}

@@ -87,7 +87,7 @@ import {
 | `ResultCard` | Resolved pull: rarity badge, per-stock payout rows, total USD, explorer link, pull-again and share-to-X actions. |
 | `OddsPanel` | 98/2 odds, computed EV and house edge, inventory and total pulls. Shows a skeleton while `loading`. |
 | `LiveFeed` | Newest-first ring-buffer feed (`FeedItem[]`), shortened addresses, relative time, legendary highlight, explorer links. Accepts `loading` and `error`. |
-| `ShareButton` | Opens an X intent in a new tab. Pass `text` and `url`; an empty `url` falls back to the current origin after hydration. |
+| `ShareButton` | Opens an X intent in a new tab. Pass `text` and `url`; an empty `url` falls back to the current origin after hydration. Optional `label` defaults to "Share my pull". |
 | `QrCard` | Large high-contrast QR of the live URL. The QR is generated locally with `qrcode` (no external image service). |
 
 All USD values and token amounts are pre-formatted strings (`PanelPayout.usd`,

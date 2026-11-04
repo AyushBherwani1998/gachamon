@@ -56,29 +56,27 @@ export function ResultCard({
         className={cn("absolute inset-x-0 top-0 h-1.5", accent.strip)}
       />
       <CardHeader font="normal" className="pt-2 pb-3">
-        <div className="flex items-start justify-between gap-3">
-          <PanelHeader
-            eyebrow="The claw paid out"
-            title="Pull result"
-            tag={
-              <span
-                className={cn(
-                  "retro inline-flex shrink-0 items-center gap-1.5 border-2 border-black px-2 py-1.5 text-[9px] leading-none shadow-[2px_2px_0_0_rgba(0,0,0,0.55)]",
-                  accent.badge,
-                )}
-              >
-                <PixelGlyph
-                  name={legendary ? "crown" : "spark"}
-                  className="size-2.5"
-                />
-                {legendary ? "Legendary" : "Common"}
-              </span>
-            }
-          />
-        </div>
+        <PanelHeader
+          eyebrow="The claw paid out"
+          title="Pull result"
+          tag={
+            <span
+              className={cn(
+                "retro inline-flex shrink-0 items-center gap-1.5 border-2 border-black px-2 py-1.5 text-[9px] uppercase leading-none shadow-[2px_2px_0_0_rgba(0,0,0,0.55)]",
+                accent.badge,
+              )}
+            >
+              <PixelGlyph
+                name={legendary ? "crown" : "spark"}
+                className="size-2.5"
+              />
+              {legendary ? "Legendary" : "Common"}
+            </span>
+          }
+        />
       </CardHeader>
 
-      <CardContent font="normal" className="flex flex-1 flex-col gap-4 pb-5">
+      <CardContent font="normal" className="@container flex flex-1 flex-col gap-4 pb-5">
         <div className={cn("border-2 border-dashed p-3", accent.frame)}>
           <div className="mb-2.5 flex items-center justify-between gap-2">
             <p className="retro text-[8px] uppercase leading-none text-muted-foreground">
@@ -146,7 +144,7 @@ export function ResultCard({
         </div>
 
         <div className="mt-auto space-y-2">
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="grid gap-2 @min-[420px]:grid-cols-2">
             <Button
               type="button"
               size="lg"

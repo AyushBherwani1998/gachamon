@@ -107,8 +107,8 @@ export function QrCard({
                   </span>
                 ) : (
                   <span className="w-full">
-                    <PanelSkeleton className="mx-auto h-3 w-2/3 bg-black/10" />
-                    <PanelSkeleton className="mx-auto mt-3 h-3 w-1/2 bg-black/10" />
+                    <PanelSkeleton className="mx-auto h-3 w-2/3 bg-black/15!" />
+                    <PanelSkeleton className="mx-auto mt-3 h-3 w-1/2 bg-black/15!" />
                     <span className="sr-only">Generating QR code…</span>
                   </span>
                 )}

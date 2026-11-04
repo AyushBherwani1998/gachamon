@@ -260,6 +260,7 @@ export default function PanelsPreviewPage() {
                 <ShareButton
                   text="Free play on testnet - pull a real stock for 1 USDC on @monad. Verifiable randomness by Pyth. #MonadBlitz @monad_dev @geeky_kartikey"
                   url={LIVE_URL}
+                  label="Share the machine"
                 />
               </div>
             </Frame>

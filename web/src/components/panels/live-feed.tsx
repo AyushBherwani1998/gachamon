@@ -124,6 +124,7 @@ function FeedRow({
           target="_blank"
           rel="noopener noreferrer"
           aria-label={`View ${item.player} on Monadscan`}
+          title="View on Monadscan"
           className={cn(
             "grid size-11 place-items-center border-2 border-transparent text-muted-foreground",
             "transition-[transform,color,border-color] duration-150 ease-out motion-reduce:transition-none",

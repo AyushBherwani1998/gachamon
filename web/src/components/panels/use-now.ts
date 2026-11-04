@@ -19,8 +19,8 @@ function tick() {
 function subscribe(listener: () => void) {
   listeners.add(listener);
 
-  if (now === 0) tick();
   if (timer === null) {
+    tick();
     timer = setInterval(tick, 30_000);
   }
 
