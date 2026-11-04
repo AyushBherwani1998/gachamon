@@ -226,7 +226,7 @@ export function OddsPanel({
 
         <p
           className={cn(
-            "font-mono text-[9px] leading-relaxed text-muted-foreground",
+            "font-mono text-[9px] leading-relaxed tabular-nums text-muted-foreground",
             loading && "opacity-0",
           )}
           aria-hidden={loading || undefined}

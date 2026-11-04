@@ -123,7 +123,7 @@ export function QrCard({
           rel="noopener noreferrer"
           className={cn(
             "inline-flex min-h-11 max-w-full items-center gap-1.5 px-2",
-            "font-mono text-[10px] text-muted-foreground underline decoration-dotted underline-offset-4",
+            "font-mono text-[10px] tabular-nums text-muted-foreground underline decoration-dotted underline-offset-4",
             "transition-colors duration-150 ease-out hover:text-foreground motion-reduce:transition-none",
             "active:scale-[0.96] motion-reduce:active:scale-100",
             "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground",
