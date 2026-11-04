@@ -7,7 +7,7 @@ Backend relay and indexer service for the xStocks Claw Machine on Monad mainnet 
 The frontend builds and signs the complete `pull(bytes32 userRandomNumber, bytes[] priceUpdateData)` transaction (player pays gas + fees in MON), then POSTs the raw signed transaction hex to the backend. The backend validates and broadcasts it to the Monad network.
 
 **Transaction Flow:**
-1. Frontend fetches Pyth price updates from Hermes API
+1. Frontend calls the backend's `GET /price-update` (the backend calls Hermes with its server-side `PYTH_API_KEY`)
 2. Frontend signs transaction with `priceUpdateData` (player pays Pyth fee + Entropy fee + gas)
 3. Backend validates: chain ID, recipient, function selector, gas limit, value ≥ `getTotalFee(priceUpdateData)`
 4. Backend broadcasts transaction to Monad RPC
@@ -56,7 +56,32 @@ PORT=3000
 RPC_URL=https://rpc.monad.xyz
 WS_URL=wss://rpc.monad.xyz
 CLAW_MACHINE_ADDRESS=0x... # Set after contract deployment
+PYTH_API_KEY=...           # Server-side only, required for /price-update
 ```
+
+Optional Pyth variables:
+
+```env
+# Defaults to the Dourolabs Hermes proxy
+PYTH_HERMES_URL=https://pyth.dourolabs.app/hermes/v2/updates/price/latest
+
+# Symbols requested when the contract is not configured (default: TSLAx)
+PYTH_FEEDS=TSLAx
+```
+
+**Pyth Hermes authentication (Pyth Core upgrade):** Hermes now rejects
+unauthenticated requests with `401`. Every request from the backend sends
+`Authorization: Bearer $PYTH_API_KEY` and `encoding=hex`. The key is
+server-side only: never expose it in browser code, never use a
+`NEXT_PUBLIC_*`/`VITE_*` variable, and never commit `.env`.
+
+Our current key is only entitled to `Equity.US.TSLA/USD`. Requesting a
+non-entitled feed (NVDA/AAPL/SPY) makes Hermes return `403` for the entire
+batch, so keep `PYTH_FEEDS` limited to entitled symbols. When
+`CLAW_MACHINE_ADDRESS` points at a deployed contract, the backend ignores
+`PYTH_FEEDS` and reads the feed IDs from the contract
+(`getSupportedTokens()` + `tokenInfo(token)`), so tokens added later with
+`addToken` work without a redeploy.
 
 ## Running
 
@@ -136,14 +161,14 @@ Get current machine status.
 
 ### GET /price-update
 
-Fetch Pyth price update data from Hermes API, plus the total fee required for the pull transaction.
+Fetch Pyth price update data from Hermes and the total fee required for the pull transaction.
 
 **Query Parameters:**
-- `symbols` (optional): Comma-separated list of symbols (default: `TSLAx,NVDAx,AAPLx,SPYx`)
+- `symbols` (optional): Comma-separated list of symbols. When omitted, the feed list comes from the ClawMachine contract if `CLAW_MACHINE_ADDRESS` is configured, otherwise from `PYTH_FEEDS` (default `TSLAx`).
 
 **Example:**
 ```
-GET /price-update?symbols=TSLAx,NVDAx
+GET /price-update?symbols=TSLAx
 ```
 
 **Response:**
@@ -155,10 +180,23 @@ GET /price-update?symbols=TSLAx,NVDAx
 ```
 
 **Notes:**
-- `priceUpdateData` contains signed price proofs from Pyth oracle
-- `fee` is the total fee from `getTotalFee(priceUpdateData)` (Pyth fee + Entropy fee in wei)
-- Frontend must include this `priceUpdateData` in the `pull()` transaction
-- Frontend must send at least `fee` amount as transaction value
+- `priceUpdateData` contains one signed price proof per feed. Hermes returns `binary.data` as an array of hex strings; each element becomes its own `0x`-prefixed `bytes` entry (they are not concatenated).
+- `fee` is the total fee from `getTotalFee(priceUpdateData)` (Pyth fee + Entropy fee in wei). It is never estimated: if the contract read fails, the route returns an error.
+- The backend attaches `Authorization: Bearer $PYTH_API_KEY` to every Hermes request. The key never leaves the server.
+- Frontend must include this `priceUpdateData` in the `pull()` transaction and send at least `fee` as transaction value.
+
+**Errors:**
+
+| Status | Meaning |
+|--------|---------|
+| 400 | Unknown symbol in `symbols` |
+| 401 | Hermes rejected the API key |
+| 403 | The API key is not entitled to one of the requested feeds |
+| 429 | Hermes rate limit exceeded |
+| 502 | Hermes/network failure, empty binary data, or `getTotalFee` read failed |
+| 503 | `PYTH_API_KEY` (or the feed list) is not configured |
+
+Errors are returned as `{ "error": "..." }` with the upstream status, so the frontend never signs a pull with empty price data.
 
 ### GET /pulls/:id
 
@@ -433,7 +471,8 @@ backend/
 │   ├── services/
 │   │   ├── contract.ts           # Contract read operations
 │   │   ├── indexer.ts            # Event indexer
-│   │   ├── pyth.ts               # Pyth price feed integration
+│   │   ├── pyth.ts               # Pyth Hermes client (auth, feed IDs, fee)
+│   │   ├── pyth.test.ts          # Hermes auth/parsing/error tests
 │   │   ├── relay.ts              # Transaction validation & relay
 │   │   └── websocket.ts          # WebSocket server
 │   ├── types/
@@ -472,12 +511,13 @@ The following features require the contract to be deployed and address configure
 
 - ✅ Transaction relay validation (works without contract)
 - ❌ `/machine` endpoint (requires contract deployment)
-- ✅ `/price-update` endpoint (works independently)
+- ⚠️ `/price-update` fetches prices without a contract, but `fee` requires `getTotalFee` on the deployed contract (returns 502 otherwise)
 - ❌ Event indexer (requires contract deployment)
 - ❌ Pull history endpoints (require indexed events)
 
 The backend is designed to gracefully handle a missing contract:
 - `/machine` returns default/zero values with try/catch
+- `/price-update` falls back to `PYTH_FEEDS` for the feed list
 - Indexer logs errors but doesn't crash
 
 ## Rate Limiting
@@ -488,7 +528,7 @@ The backend is designed to gracefully handle a missing contract:
 
 ## Testing
 
-Tests validate transaction relay logic:
+Tests validate transaction relay and Pyth/Hermes integration:
 
 ```bash
 npm test
@@ -502,8 +542,14 @@ Test coverage:
 - ✅ Zero value rejection
 - ✅ Insufficient value rejection (value < getTotalFee)
 - ✅ Valid transaction acceptance
+- ✅ Hermes `Authorization: Bearer` header and `encoding=hex`
+- ✅ `binary.data` array mapped to one `priceUpdateData` entry per element
+- ✅ 401/403/429 from Hermes surfaced as errors (no empty data, no estimated fee)
+- ✅ Feed IDs read from the contract when configured
+- ✅ `/price-update` route returns the upstream status and message
 
-Tests use mock accounts and do not require a live Monad connection.
+Hermes calls are mocked; tests use mock accounts and do not require a live
+Monad connection or a real `PYTH_API_KEY`.
 
 ## Deployment
 

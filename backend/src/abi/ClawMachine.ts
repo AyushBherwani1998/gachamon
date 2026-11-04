@@ -122,6 +122,30 @@ export const ClawMachineABI = [
     ],
   },
 
+  // View functions - Supported tokens and Pyth feed IDs
+  {
+    type: 'function',
+    name: 'getSupportedTokens',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [
+      { name: '', type: 'address[]' },
+    ],
+  },
+  {
+    type: 'function',
+    name: 'tokenInfo',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'token', type: 'address' },
+    ],
+    outputs: [
+      { name: 'pythFeedId', type: 'bytes32' },
+      { name: 'decimals', type: 'uint8' },
+      { name: 'supported', type: 'bool' },
+    ],
+  },
+
   // View functions - Machine status
   {
     type: 'function',

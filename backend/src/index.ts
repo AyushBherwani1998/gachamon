@@ -27,7 +27,7 @@ console.log(`WebSocket endpoint: ws://localhost:${config.port}/events`);
 console.log('\nEndpoints:');
 console.log('  POST /relay');
 console.log('  GET  /machine');
-console.log('  GET  /price-update?symbols=TSLAx,NVDAx,...');
+console.log('  GET  /price-update?symbols=TSLAx');
 console.log('  GET  /pulls/:id');
 console.log('  GET  /players/:address/pulls');
 console.log('  GET  /leaderboard');
