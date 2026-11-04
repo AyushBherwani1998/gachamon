@@ -116,7 +116,7 @@ Environment options:
 
 | Variable | Default | Meaning |
 |----------|---------|---------|
-| `STOCKS` | `TSLAx` | Comma-separated subset of `TSLAx,NVDAx,AAPLx,SPYx` |
+| `STOCKS` | `TSLAx,QQQx` | Comma-separated subset of `TSLAx,QQQx,VOOx,NVDAx,AAPLx,SPYx` |
 | `LEGENDARY_MULTIPLIER` | unset (10) | Calls `setParameters` changing only the multiplier |
 | `CALLBACK_GAS_LIMIT` | unset (500000) | Calls `setCallbackGasLimit` |
 
@@ -126,16 +126,21 @@ provider and parameters.
 
 ### Post-deploy steps
 
-1. **Send inventory.** The machine pays out from its own balance. Send TSLAx to the
-   contract (at least 10 USD for a 10x legendary):
+1. **Send inventory.** The machine pays out from its own balance. Send the tokens you
+   enabled (`TSLAx` and `QQQx` by default; at least 10 USD total for a 10x legendary):
 
    ```bash
    cast send 0x8aD3c73F833d3F9A523aB01476625F269aEB7Cf0 \
      "transfer(address,uint256)" <CLAW_MACHINE> <AMOUNT> \
      --rpc-url monad --account deployer
+   cast send 0xa753A7395cAe905Cd615Da0B82A53E0560f250af \
+     "transfer(address,uint256)" <CLAW_MACHINE> <AMOUNT> \
+     --rpc-url monad --account deployer
    ```
 
-   Alternatively `refillInventory([TSLAx], [amount])` after approving the machine.
+   Alternatively `refillInventory([TSLAx, QQQx], [amount1, amount2])` after approving
+   the machine. QQQx rebases: `balanceOf` is in underlying-share units, so send share
+   units and let the machine price them at the QQQ share price.
 
 2. **Tune parameters if needed.**
 
@@ -187,6 +192,8 @@ Writes `deployments/monad-testnet.json` only when broadcasting.
 | Pyth Entropy V2 | `0xD458261E832415CFd3BAE5E416FdF3230ce6F134` |
 | Entropy default provider | `0x52DeaA1c84233F7bb8C8A45baeDE41091c616506` |
 | TSLAx | `0x8aD3c73F833d3F9A523aB01476625F269aEB7Cf0` |
+| QQQx | `0xa753A7395cAe905Cd615Da0B82A53E0560f250af` |
+| VOOx | `0xFfAE0B911CB2cb7B49FD75011D99D137C040A9eF` |
 | NVDAx | `0xc845b2894dBddd03858fd2D643B4eF725fE0849d` |
 | AAPLx | `0x9d275685dC284C8eB1C79f6ABA7a63Dc75ec890a` |
 | SPYx | `0x90A2a4c76b5D8c0bc892A69EA28Aa775a8f2dD48` |
@@ -209,19 +216,24 @@ testnet, but its default provider is not registered there: `requestV2` reverts a
 deployment is `0x825c...` (provider registered, `getFeeV2(provider, 500000)` returns
 about 0.128 MON). This was verified live on 2026-11-04; the deploy script uses it.
 
-## Why TSLAx only
+## Why TSLAx and QQQx
 
-Our Pyth Hermes API key is entitled to exactly one feed: `Equity.US.TSLA/USD`
-(`0x16dad506...32f1`). Requests for NVDA, AAPL, SPY and the xStock crypto feeds
+Our Pyth Hermes API key is entitled to `Equity.US.TSLA/USD`, `Equity.US.QQQ/USD`
+and `Equity.US.VOO/USD`. Requests for NVDA, AAPL, SPY and the xStock crypto feeds
 return HTTP 403 "Not entitled", so the frontend cannot produce a valid update for
-them. The contract therefore launches with TSLAx only.
+them. The deploy script therefore defaults to `STOCKS=TSLAx,QQQx`.
+
+QQQx and VOOx balances rebase: `multiplier()` is about 1.0035 and `balanceOf` is in
+underlying-share units. Pricing `balanceOf` at the share price is therefore correct
+for both inventory checks and payouts; the contract never multiplies by
+`multiplier()`.
 
 The list is not hardcoded in the frontend: read `getSupportedTokens()` and
 `tokenInfo(token)`. When entitlement arrives, the owner can add tokens without a
 redeploy:
 
 ```solidity
-claw.addToken(NVDAx, 0xb1073854ed24cbc755dc527418f52b7d271f6cc967bbf8d8129112b18860a593);
+claw.addToken(VOOx, 0x236b30dd09a9c00dfeec156c7b1efd646c0f01825a1758e3e4a0679e3bdff179);
 ```
 
 ## Entropy integration

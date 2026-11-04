@@ -18,12 +18,12 @@ import {ClawMachine} from "../src/ClawMachine.sol";
  *        --verifier-url https://sourcify-api-monad.blockvision.org/
  *
  *      Optional env:
- *        STOCKS=TSLAx                comma-separated subset of TSLAx,NVDAx,AAPLx,SPYx
+ *        STOCKS=TSLAx,QQQx          comma-separated subset of TSLAx,QQQx,VOOx,NVDAx,AAPLx,SPYx
  *        LEGENDARY_MULTIPLIER=5      keep the other defaults, change only the multiplier
  *        CALLBACK_GAS_LIMIT=500000   gas forwarded to the Entropy callback
  *
- *      Only TSLA has a Pyth feed that our Hermes key is entitled to, so the default is
- *      TSLAx only. The other symbols are wired for when entitlement arrives.
+ *      Our Hermes key is entitled to TSLA, QQQ and VOO, so the default is TSLAx,QQQx.
+ *      The other symbols are wired for when entitlement arrives.
  */
 contract Deploy is Script {
     // Monad mainnet (chain 143)
@@ -35,6 +35,8 @@ contract Deploy is Script {
     address internal constant NVDAX = 0xc845b2894dBddd03858fd2D643B4eF725fE0849d;
     address internal constant AAPLX = 0x9d275685dC284C8eB1C79f6ABA7a63Dc75ec890a;
     address internal constant SPYX = 0x90A2a4c76b5D8c0bc892A69EA28Aa775a8f2dD48;
+    address internal constant QQQX = 0xa753A7395cAe905Cd615Da0B82A53E0560f250af;
+    address internal constant VOOX = 0xFfAE0B911CB2cb7B49FD75011D99D137C040A9eF;
 
     // Pyth price feed IDs (from Hermes)
     bytes32 internal constant TSLA_FEED_ID =
@@ -45,18 +47,22 @@ contract Deploy is Script {
         0x49f6b65cb1de6b10eaf75e7c03ca029c306d0357e91b5311b175084a5ad55688;
     bytes32 internal constant SPY_FEED_ID =
         0x19e09bb805456ada3979a7d1cbb4b6d63babc3a0f8e8a9509f68afa5c4c11cd5;
+    bytes32 internal constant QQQ_FEED_ID =
+        0x9695e2b96ea7b3859da9ed25b7a46a920a776e2fdae19a7bcfdf2b219230452d;
+    bytes32 internal constant VOO_FEED_ID =
+        0x236b30dd09a9c00dfeec156c7b1efd646c0f01825a1758e3e4a0679e3bdff179;
 
     function run() external returns (ClawMachine claw) {
         address deployer = msg.sender;
         require(block.chainid == 143, "Must deploy on Monad mainnet (chain 143)");
 
-        string[] memory symbols = _parseSymbols(vm.envOr("STOCKS", string("TSLAx")));
+        string[] memory symbols = _parseSymbols(vm.envOr("STOCKS", string("TSLAx,QQQx")));
         uint256 legendaryMultiplier = vm.envOr("LEGENDARY_MULTIPLIER", uint256(0));
         uint256 callbackGasLimit = vm.envOr("CALLBACK_GAS_LIMIT", uint256(0));
 
         console.log("Deploying from:", deployer);
         console.log("Chain ID:", block.chainid);
-        console.log("Stocks:", vm.envOr("STOCKS", string("TSLAx")));
+        console.log("Stocks:", vm.envOr("STOCKS", string("TSLAx,QQQx")));
 
         vm.startBroadcast();
 
@@ -103,7 +109,7 @@ contract Deploy is Script {
         }
 
         console.log("\nNext steps:");
-        console.log("1. Send TSLAx inventory to the machine (at least 10 USD for a 10x legendary)");
+        console.log("1. Send TSLAx/QQQx inventory to the machine (at least 10 USD for a 10x legendary)");
         console.log("2. Point the backend at the ClawMachine address");
         console.log("3. Keep PYTH_API_KEY server-side and fetch the TSLA update from Hermes");
     }
@@ -157,6 +163,8 @@ contract Deploy is Script {
         if (hash == keccak256("NVDAx")) return NVDAX;
         if (hash == keccak256("AAPLx")) return AAPLX;
         if (hash == keccak256("SPYx")) return SPYX;
+        if (hash == keccak256("QQQx")) return QQQX;
+        if (hash == keccak256("VOOx")) return VOOX;
         revert("Unknown stock symbol");
     }
 
@@ -166,6 +174,8 @@ contract Deploy is Script {
         if (hash == keccak256("NVDAx")) return NVDA_FEED_ID;
         if (hash == keccak256("AAPLx")) return AAPL_FEED_ID;
         if (hash == keccak256("SPYx")) return SPY_FEED_ID;
+        if (hash == keccak256("QQQx")) return QQQ_FEED_ID;
+        if (hash == keccak256("VOOx")) return VOO_FEED_ID;
         revert("Unknown stock symbol");
     }
 

@@ -77,6 +77,8 @@ Entropy calls `IEntropyConsumer._entropyCallback`, which checks that `msg.sender
 | Symbol | Feed ID | Valid feed | Our Hermes key |
 |--------|---------|-----------|----------------|
 | TSLA | `0x16dad506d7db8da01c87581c87ca897a012a153557d4d578c3b9c9e1bc0632f1` | yes | entitled |
+| QQQ | `0x9695e2b96ea7b3859da9ed25b7a46a920a776e2fdae19a7bcfdf2b219230452d` | yes | entitled |
+| VOO | `0x236b30dd09a9c00dfeec156c7b1efd646c0f01825a1758e3e4a0679e3bdff179` | yes | entitled |
 | NVDA | `0xb1073854ed24cbc755dc527418f52b7d271f6cc967bbf8d8129112b18860a593` | yes | HTTP 403 "Not entitled" |
 | AAPL | `0x49f6b65cb1de6b10eaf75e7c03ca029c306d0357e91b5311b175084a5ad55688` | yes | HTTP 403 "Not entitled" |
 | SPY | `0x19e09bb805456ada3979a7d1cbb4b6d63babc3a0f8e8a9509f68afa5c4c11cd5` | yes | HTTP 403 "Not entitled" |
@@ -89,9 +91,10 @@ curl -s "https://hermes.pyth.network/v2/price_feeds?query=TSLA&asset_type=equity
 # "id": "16dad506d7db8da01c87581c87ca897a012a153557d4d578c3b9c9e1bc0632f1"
 ```
 
-The entitlement is the reason the machine launches with TSLAx only. The owner can
-call `addToken` later; the frontend must read `getSupportedTokens()` and
-`tokenInfo(token)` instead of hardcoding a list.
+The entitlement is the reason the deploy script defaults to `STOCKS=TSLAx,QQQx`.
+VOOx can be enabled with `STOCKS=TSLAx,QQQx,VOOx`, and the owner can call `addToken`
+later; the frontend must read `getSupportedTokens()` and `tokenInfo(token)` instead
+of hardcoding a list.
 
 ## Hermes API
 
