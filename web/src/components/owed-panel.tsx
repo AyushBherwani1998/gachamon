@@ -8,7 +8,7 @@ import { formatToken, formatUsd6 } from "@/lib/format";
 
 /**
  * Shown only when a payout transfer failed and the contract recorded an owed
- * balance (`owed(player, token)`). Withdrawing retries every token at once.
+ * balance (`getOwedBalance(player)`). Withdrawing retries every token at once.
  */
 export function OwedPanel() {
   const { entries, isWithdrawing, error, hash, withdraw } = useOwed();

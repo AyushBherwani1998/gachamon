@@ -1,40 +1,28 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { BaseError, parseEventLogs, type Address, type Hex } from "viem";
+import { parseEventLogs, toHex, type Address, type Hex } from "viem";
 import { useAccount, usePublicClient, useWriteContract } from "wagmi";
 
-import { clawMachineAbi, PullStatus } from "@/abi/clawMachine";
+import { clawMachineAbi } from "@/abi/clawMachine";
 import { erc20Abi } from "@/abi/erc20";
 import { deployment, isDeployed, IS_DEMO_MODE } from "@/config/deployments";
+import { friendlyTxError } from "@/lib/errors";
 import { drawMockPull } from "@/lib/mock";
+import { fetchPriceUpdate, tokenAmountTo18 } from "@/lib/prices";
 import type { PullPhase, PullResult, PullState, TokenAmount } from "@/lib/types";
 import { shortAddress } from "@/lib/format";
 
-const POLL_INTERVAL_MS = 500;
+const POLL_INTERVAL_MS = 1_500;
+const MAX_WAIT_MS = 120_000;
 const SLOW_AFTER_MS = 60_000;
-const DEFAULT_REFUND_TIMEOUT = 10n * 60n; // contract STUCK_PULL_TIMEOUT fallback
-
-function friendlyError(error: unknown): string {
-  if (error instanceof BaseError) {
-    if (/user rejected|denied/i.test(error.shortMessage)) return "Transaction cancelled.";
-    return error.shortMessage;
-  }
-  if (error instanceof Error) {
-    if (/user rejected|denied/i.test(error.message)) return "Transaction cancelled.";
-    return error.message;
-  }
-  return "Something went wrong. Please try again.";
-}
+const LOG_CHUNK = 100n;
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/**
- * Simulated pull for NEXT_PUBLIC_DEMO_MODE=mock. Same interface as the real
- * hook, resolves after a 1.5 s "draw" with 2% legendary odds.
- */
+/** Simulated pull for NEXT_PUBLIC_DEMO_MODE=mock. Same interface as the real hook. */
 function useMockPull(): PullState {
   const [phase, setPhase] = useState<PullPhase>("idle");
   const [result, setResult] = useState<PullResult | null>(null);
@@ -73,25 +61,24 @@ function useMockPull(): PullState {
     error: null,
     txHash: null,
     slow,
-    refundable: false,
-    refunded: false,
-    refundTxHash: null,
-    refundError: null,
-    isRefunding: false,
     start,
     reset,
-    refund: async () => {},
   };
 }
 
-interface PullStruct {
-  player: Address;
-  sequenceNumber: bigint;
-  status: number;
-  legendary: boolean;
-  requestedAt: bigint;
-  resolvedAt: bigint;
-  valueUsd6: bigint;
+async function readSymbol(
+  client: NonNullable<ReturnType<typeof usePublicClient>>,
+  token: Address
+): Promise<string> {
+  try {
+    return await client.readContract({
+      address: token,
+      abi: erc20Abi,
+      functionName: "symbol",
+    });
+  } catch {
+    return shortAddress(token);
+  }
 }
 
 export function usePull(): PullState {
@@ -105,13 +92,7 @@ export function usePull(): PullState {
   const [error, setError] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<Hex | null>(null);
   const [slow, setSlow] = useState(false);
-  const [refundable, setRefundable] = useState(false);
-  const [refunded, setRefunded] = useState(false);
-  const [refundTxHash, setRefundTxHash] = useState<Hex | null>(null);
-  const [refundError, setRefundError] = useState<string | null>(null);
-  const [isRefunding, setIsRefunding] = useState(false);
   const runId = useRef(0);
-  const refundTimeout = useRef<bigint>(DEFAULT_REFUND_TIMEOUT);
 
   useEffect(
     () => () => {
@@ -149,14 +130,14 @@ export function usePull(): PullState {
     setPullId(null);
     setTxHash(null);
     setSlow(false);
-    setRefundable(false);
-    setRefunded(false);
-    setRefundTxHash(null);
-    setRefundError(null);
-    setIsRefunding(false);
 
     try {
-      const [pullPrice, allowance, timeout] = await Promise.all([
+      // 1. Fresh signed Pyth update from the server proxy (key stays server-side).
+      const priceUpdate = await fetchPriceUpdate(deployment.chainId);
+      if (runId.current !== currentRun) return;
+      const updateData = priceUpdate.updateData;
+
+      const [pullPrice, allowance] = await Promise.all([
         publicClient.readContract({
           address: deployment.clawMachine,
           abi: clawMachineAbi,
@@ -168,42 +149,54 @@ export function usePull(): PullState {
           functionName: "allowance",
           args: [address, deployment.clawMachine],
         }),
-        publicClient.readContract({
-          address: deployment.clawMachine,
-          abi: clawMachineAbi,
-          functionName: "STUCK_PULL_TIMEOUT",
-        }),
       ]);
-      refundTimeout.current = timeout;
 
+      // 2. Approve the exact pull price when the allowance is short.
       if (allowance < pullPrice) {
+        if (runId.current !== currentRun) return;
         setPhase("approving");
         const approveHash = await writeContractAsync({
           address: deployment.usdc,
           abi: erc20Abi,
           functionName: "approve",
-          args: [deployment.clawMachine, pullPrice * 5n],
+          args: [deployment.clawMachine, pullPrice],
           chainId: deployment.chainId,
         });
-        const approveReceipt = await publicClient.waitForTransactionReceipt({ hash: approveHash });
+        const approveReceipt = await publicClient.waitForTransactionReceipt({
+          hash: approveHash,
+        });
         if (approveReceipt.status !== "success") throw new Error("USDC approval reverted.");
       }
 
       if (runId.current !== currentRun) return;
       setPhase("confirming");
 
-      // Read the entropy fee immediately before sending the pull. Approval
-      // waits can be minutes long and the fee is not cached across them.
+      // 3. Read the total fee immediately before sending; the first read may be
+      // stale after a slow approval. Simulate, then send pull(random, update).
       const fee = await publicClient.readContract({
         address: deployment.clawMachine,
         abi: clawMachineAbi,
-        functionName: "getFee",
+        functionName: "getTotalFee",
+        args: [updateData],
+      });
+
+      const userRandomNumber = toHex(crypto.getRandomValues(new Uint8Array(32)));
+      const args = [userRandomNumber, updateData] as const;
+
+      await publicClient.simulateContract({
+        address: deployment.clawMachine,
+        abi: clawMachineAbi,
+        functionName: "pull",
+        args,
+        value: fee,
+        account: address,
       });
 
       const hash = await writeContractAsync({
         address: deployment.clawMachine,
         abi: clawMachineAbi,
         functionName: "pull",
+        args,
         value: fee,
         chainId: deployment.chainId,
       });
@@ -212,151 +205,123 @@ export function usePull(): PullState {
       if (receipt.status !== "success") throw new Error("The pull transaction reverted.");
       if (runId.current !== currentRun) return;
 
-      let nextPullId: bigint | undefined;
-
-      // Decode PullRequested from the pull() receipt.
-      const events = parseEventLogs({
+      // 5. PullRequested carries the id and the Entropy sequence.
+      const requested = parseEventLogs({
         abi: clawMachineAbi,
         eventName: "PullRequested",
         logs: receipt.logs,
-      });
-      if (events.length > 0) {
-        nextPullId = events[0].args.pullId;
-      }
-
-      if (nextPullId === undefined) {
+      })[0];
+      if (!requested) {
         throw new Error("Pull succeeded but no pull id was found in the receipt.");
       }
 
+      const nextPullId = requested.args.pullId;
+      const sequenceNumber = requested.args.sequenceNumber;
       setPullId(nextPullId);
       setPhase("drawing");
 
+      // 6. Poll PullResolved (indexed pullId) from the receipt block forward,
+      // in chunks of at most 100 blocks, for up to 120 s.
       const startedAt = Date.now();
-      let resolved = false;
-      let markedSlow = false;
-      let pollFailures = 0;
-      while (runId.current === currentRun) {
-        let pull: PullStruct;
+      let cursor = receipt.blockNumber;
+      const found: {
+        args: {
+          player: Address;
+          legendary: boolean;
+          stocks: readonly Address[];
+          amounts: readonly bigint[];
+        } | null;
+      } = { args: null };
+
+      while (Date.now() - startedAt < MAX_WAIT_MS) {
+        if (runId.current !== currentRun) return;
         try {
-          pull = await publicClient.readContract({
-            address: deployment.clawMachine,
-            abi: clawMachineAbi,
-            functionName: "getPull",
-            args: [nextPullId],
-          });
-          pollFailures = 0;
-        } catch (pollError) {
-          pollFailures += 1;
-          if (pollFailures > 20) throw pollError;
-          await sleep(POLL_INTERVAL_MS);
-          continue;
-        }
-
-        if (pull.status === PullStatus.Resolved) {
-          resolved = true;
-          setRefundable(false);
-
-          // A zero-value resolved pull is a refund, not a prize.
-          if (pull.valueUsd6 === 0n && !pull.legendary) {
-            if (runId.current !== currentRun) return;
-            setRefunded(true);
-            setPhase("revealed");
-            break;
+          const latest = await publicClient.getBlockNumber();
+          let scan = cursor;
+          while (scan <= latest) {
+            const toBlock = scan + LOG_CHUNK - 1n > latest ? latest : scan + LOG_CHUNK - 1n;
+            const logs = await publicClient.getContractEvents({
+              address: deployment.clawMachine,
+              abi: clawMachineAbi,
+              eventName: "PullResolved",
+              args: { pullId: nextPullId },
+              fromBlock: scan,
+              toBlock,
+            });
+            if (logs.length > 0) {
+              found.args = logs[0].args as unknown as typeof found.args;
+              break;
+            }
+            scan = toBlock + 1n;
           }
-
-          const [payoutStocks, amounts] = await publicClient.readContract({
-            address: deployment.clawMachine,
-            abi: clawMachineAbi,
-            functionName: "getPullPayout",
-            args: [nextPullId],
-          });
-
-          const tokens: TokenAmount[] = await Promise.all(
-            payoutStocks.map(async (stock: Address, index: number) => {
-              let symbol = shortAddress(stock);
-              try {
-                symbol = await publicClient.readContract({
-                  address: stock,
-                  abi: erc20Abi,
-                  functionName: "symbol",
-                });
-              } catch {
-                // keep the short address fallback
-              }
-              return { address: stock, symbol, amount: amounts[index] ?? 0n };
-            })
-          );
-
-          if (runId.current !== currentRun) return;
-          setResult({
-            pullId: nextPullId,
-            legendary: pull.legendary,
-            valueUsd6: pull.valueUsd6,
-            stocks: tokens,
-            txHash: hash,
-          });
-          setPhase("revealed");
-          break;
+          cursor = latest + 1n;
+        } catch {
+          // Transient RPC error: keep the cursor and retry on the next tick.
         }
 
-        const nowSeconds = BigInt(Math.floor(Date.now() / 1_000));
-        if (
-          pull.requestedAt > 0n &&
-          nowSeconds > pull.requestedAt + refundTimeout.current
-        ) {
-          setRefundable(true);
-        }
+        if (found.args) break;
 
-        const elapsed = Date.now() - startedAt;
-        if (elapsed >= SLOW_AFTER_MS && !markedSlow) {
-          markedSlow = true;
-          setSlow(true);
-        }
+        if (Date.now() - startedAt >= SLOW_AFTER_MS) setSlow(true);
         await sleep(POLL_INTERVAL_MS);
       }
 
-      if (!resolved && runId.current === currentRun) {
-        throw new Error("Pull did not resolve. Check the explorer for its status.");
+      if (!found.args) {
+        throw new Error(
+          "The entropy callback has not arrived yet. The pull may still resolve; check the explorer."
+        );
       }
+
+      const resolved = found.args;
+
+      // 7. USD value from the pull's on-chain price snapshot (USDC per 1e18).
+      const rawStocks = resolved.stocks ?? [];
+      const rawAmounts = resolved.amounts ?? [];
+      const payouts = rawStocks
+        .map((token, index) => ({ token, amount: rawAmounts[index] ?? 0n }))
+        .filter((payout) => payout.amount > 0n);
+
+      const snapshots = await Promise.all(
+        payouts.map(async ({ token, amount }) => {
+          try {
+            const price = await publicClient.readContract({
+              address: deployment.clawMachine,
+              abi: clawMachineAbi,
+              functionName: "getPullPriceSnapshot",
+              args: [nextPullId, token],
+            });
+            return (tokenAmountTo18(amount, 18) * price) / 10n ** 18n;
+          } catch {
+            return 0n;
+          }
+        })
+      );
+      const valueUsd6 = snapshots.reduce((total, value) => total + value, 0n);
+
+      const stocks: TokenAmount[] = await Promise.all(
+        payouts.map(async ({ token, amount }) => ({
+          address: token,
+          symbol: await readSymbol(publicClient, token),
+          amount,
+        }))
+      );
+
+      if (runId.current !== currentRun) return;
+      setResult({
+        pullId: nextPullId,
+        player: resolved.player,
+        sequenceNumber,
+        legendary: resolved.legendary,
+        valueUsd6,
+        stocks,
+        txHash: hash,
+      });
+      setPhase("revealed");
     } catch (err) {
       if (runId.current !== currentRun) return;
-      setError(friendlyError(err));
+      setError(friendlyTxError(err));
       setPhase("error");
     }
   }, [address, chainId, publicClient, writeContractAsync]);
-
-  const refund = useCallback(async () => {
-    if (pullId === null || !publicClient || !address) return;
-    if (chainId !== deployment.chainId) {
-      setRefundError(`Switch your wallet to ${deployment.name} first.`);
-      return;
-    }
-
-    setIsRefunding(true);
-    setRefundError(null);
-    try {
-      const hash = await writeContractAsync({
-        address: deployment.clawMachine,
-        abi: clawMachineAbi,
-        functionName: "refundStuckPull",
-        args: [pullId],
-        chainId: deployment.chainId,
-      });
-      setRefundTxHash(hash);
-      const receipt = await publicClient.waitForTransactionReceipt({ hash });
-      if (receipt.status !== "success") throw new Error("The refund transaction reverted.");
-
-      runId.current += 1;
-      setRefunded(true);
-      setRefundable(false);
-      setResult(null);
-      setPhase("revealed");
-    } catch (err) {
-      setRefundError(friendlyError(err));
-    } finally {
-      setIsRefunding(false);
-    }
-  }, [pullId, publicClient, address, chainId, writeContractAsync]);
 
   const reset = useCallback(() => {
     runId.current += 1;
@@ -366,11 +331,6 @@ export function usePull(): PullState {
     setError(null);
     setTxHash(null);
     setSlow(false);
-    setRefundable(false);
-    setRefunded(false);
-    setRefundTxHash(null);
-    setRefundError(null);
-    setIsRefunding(false);
   }, []);
 
   const mock = useMockPull();
@@ -384,13 +344,7 @@ export function usePull(): PullState {
     error,
     txHash,
     slow,
-    refundable,
-    refunded,
-    refundTxHash,
-    refundError,
-    isRefunding,
     start,
     reset,
-    refund,
   };
 }

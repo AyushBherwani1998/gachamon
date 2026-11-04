@@ -20,14 +20,14 @@ import { PullButton } from "@/components/pull-button";
 import { TxLink } from "@/components/tx-link";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
-import { Button } from "@/components/ui/8bit/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/8bit/card";
 import { deployment, explorerTx, IS_DEMO_MODE, isDeployed } from "@/config/deployments";
 import { useBalances } from "@/hooks/use-balances";
+import { useFeed } from "@/hooks/use-feed";
 import { useMachine } from "@/hooks/use-machine";
 import { usePull } from "@/hooks/use-pull";
 import { formatMon, formatUsd6 } from "@/lib/format";
-import { toFeedItems, toGachaResult, toPanelPayouts } from "@/lib/pull-view";
+import { toGachaResult, toPanelPayouts, usdPlain } from "@/lib/pull-view";
 import type { PullPhase } from "@/lib/types";
 
 const BUSY_PHASES: PullPhase[] = ["approving", "confirming", "drawing"];
@@ -47,6 +47,7 @@ export default function Home() {
   const machine = useMachine();
   const balances = useBalances();
   const pull = usePull();
+  const feed = useFeed(machine, pull.result);
   const [revealed, setRevealed] = useState(false);
 
   const demo = IS_DEMO_MODE;
@@ -70,13 +71,13 @@ export default function Home() {
     !demo &&
     isConnected &&
     !wrongNetwork &&
-    machine.fee !== undefined &&
+    machine.entropyFee !== undefined &&
     balances.mon !== undefined &&
-    balances.mon < machine.fee;
+    balances.mon < machine.entropyFee;
   const usdcReady = demo || isDeployed(deployment.usdc);
-  const machineReady = demo || (machine.isDeployed && machine.canPull);
+  const machineReady = demo || (machine.isDeployed && machine.pullable);
+  const pullPriceLabel = `Pull · ${usdPlain(machine.pullPrice ?? 1_000_000n)} USDC`;
 
-  const gachaPhase = pull.refunded ? "idle" : pull.phase;
   const gachaResult = pull.result
     ? toGachaResult(
         pull.result,
@@ -87,12 +88,11 @@ export default function Home() {
   const panelPayouts = pull.result
     ? toPanelPayouts(pull.result.stocks, machine, pull.result.valueUsd6)
     : [];
-  const feedItems = toFeedItems(machine);
 
   const label = useMemo(() => {
     if (demo) {
       if (busy) return pull.phase === "drawing" ? "Drawing…" : "Starting…";
-      return pull.phase === "revealed" ? "Pull again" : "Pull · 1 USDC";
+      return pull.phase === "revealed" ? "Pull again" : pullPriceLabel;
     }
     if (busy) {
       if (pull.phase === "approving") return "Approving USDC…";
@@ -106,13 +106,14 @@ export default function Home() {
     if (!usdcReady) return "USDC not configured";
     if (machine.isLoading) return "Checking machine…";
     if (machine.paused) return "Machine paused";
-    if (!machine.canPull) return "Machine refilling";
-    if (pull.phase === "revealed" || pull.refunded) return "Pull again";
+    if (machine.error && machine.inventoryValueUsd6 === undefined) return "Price feed offline";
+    if (!machine.pullable) return "Machine refilling";
+    if (pull.phase === "revealed") return "Pull again";
     if (pull.phase === "error") return "Try again";
     if (insufficientUsdc) return "Not enough USDC";
     if (insufficientMon) return "Not enough MON";
     if (needsApproval) return "Approve USDC";
-    return "Pull · 1 USDC";
+    return pullPriceLabel;
   }, [
     demo,
     busy,
@@ -124,19 +125,20 @@ export default function Home() {
     usdcReady,
     machine.isLoading,
     machine.paused,
-    machine.canPull,
+    machine.error,
+    machine.inventoryValueUsd6,
+    machine.pullable,
     pull.phase,
     pull.slow,
-    pull.refunded,
     insufficientUsdc,
     insufficientMon,
     needsApproval,
+    pullPriceLabel,
   ]);
 
   const disablePrimary =
     busy ||
     connecting ||
-    pull.isRefunding ||
     (!demo && isConnected && !wrongNetwork && !machineReady) ||
     (!demo &&
       isConnected &&
@@ -145,7 +147,7 @@ export default function Home() {
       (!usdcReady || insufficientUsdc || insufficientMon));
 
   const handlePrimary = () => {
-    if (busy || pull.isRefunding) return;
+    if (busy) return;
     if (!demo && !isConnected) {
       signIn();
       return;
@@ -168,13 +170,9 @@ export default function Home() {
   };
 
   const liveMessage = useMemo(() => {
-    if (pull.refunded) return "Pull refunded. The 1 USDC pull price was returned.";
     if (pull.phase === "approving") return "Approving USDC. Confirm the approval in your wallet.";
     if (pull.phase === "confirming") return "Confirm the pull transaction in your wallet.";
     if (pull.phase === "drawing") {
-      if (pull.refundable) {
-        return "This pull has been pending for over ten minutes. A refund is available.";
-      }
       return pull.slow
         ? "Still waiting for Pyth Entropy. The pull is pending; keep this page open."
         : "Drawing your card. Waiting for Pyth Entropy randomness.";
@@ -185,7 +183,7 @@ export default function Home() {
     }
     if (pull.phase === "error" && pull.error) return `Pull failed: ${pull.error}`;
     return "";
-  }, [pull.phase, pull.result, pull.error, pull.slow, pull.refundable, pull.refunded]);
+  }, [pull.phase, pull.result, pull.error, pull.slow]);
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -199,7 +197,7 @@ export default function Home() {
           <section className="flex flex-col items-center gap-5">
             <div className="mx-auto w-full min-w-0 max-w-[480px]">
               <PixelGachaMachine
-                phase={gachaPhase}
+                phase={pull.phase}
                 result={gachaResult}
                 onRevealed={() => setRevealed(true)}
               />
@@ -210,18 +208,18 @@ export default function Home() {
                 label={label}
                 onClick={handlePrimary}
                 disabled={disablePrimary}
-                busy={busy || connecting || pull.isRefunding}
+                busy={busy || connecting}
               />
 
-              {machine.fee !== undefined ? (
+              {machine.entropyFee !== undefined ? (
                 <p className="amount -mt-1 text-[10px] text-muted-foreground">
-                  + {formatMon(machine.fee)} Pyth Entropy fee
+                  + {formatMon(machine.entropyFee)} Pyth Entropy fee · Pyth update fee read at pull
                 </p>
               ) : null}
 
               {needsApproval && !busy && !insufficientUsdc && !insufficientMon ? (
                 <p className="text-[10px] text-muted-foreground">
-                  One approval covers 5 pulls.
+                  One approval covers one pull.
                 </p>
               ) : null}
 
@@ -240,18 +238,8 @@ export default function Home() {
 
             {!notDeployed ? (
               <div className="mx-auto flex w-full max-w-xl flex-col gap-4">
-                {pull.refunded ? (
-                  <RefundedCard refundTxHash={pull.refundTxHash} />
-                ) : pull.phase === "drawing" || pull.phase === "confirming" ? (
-                  <PendingCard
-                    pullId={pull.pullId}
-                    txHash={pull.txHash}
-                    slow={pull.slow}
-                    refundable={pull.refundable}
-                    isRefunding={pull.isRefunding}
-                    refundError={pull.refundError}
-                    onRefund={() => void pull.refund()}
-                  />
+                {pull.phase === "drawing" || pull.phase === "confirming" ? (
+                  <PendingCard pullId={pull.pullId} txHash={pull.txHash} slow={pull.slow} />
                 ) : pull.phase === "revealed" && pull.result ? (
                   revealed ? (
                     <ResultCard
@@ -297,9 +285,13 @@ export default function Home() {
           <aside className="flex flex-col gap-5">
             <OddsPanel
               legendaryBps={machine.legendaryBps ?? 200}
-              commonUsd={formatUsd6(machine.commonValue ?? 730_000n)}
-              legendaryUsd={formatUsd6(machine.legendaryValue ?? 10_000_000n)}
-              pullPriceUsd={formatUsd6(machine.pullPrice ?? 1_000_000n)}
+              commonUsd={machine.commonPayout === undefined ? "—" : formatUsd6(machine.commonPayout)}
+              legendaryUsd={
+                machine.legendaryPayout === undefined ? "—" : formatUsd6(machine.legendaryPayout)
+              }
+              pullPriceUsd={
+                machine.pullPrice === undefined ? "—" : formatUsd6(machine.pullPrice)
+              }
               inventoryUsd={
                 machine.inventoryValueUsd6 === undefined
                   ? undefined
@@ -317,12 +309,12 @@ export default function Home() {
 
         <section className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_400px]">
           <LiveFeed
-            items={feedItems}
-            loading={machine.isDeployed && machine.isLoading && feedItems.length === 0}
+            items={feed.items}
+            loading={feed.loading}
             error={
               notDeployed
                 ? `ClawMachine is not deployed on ${deployment.name} yet.`
-                : machine.error ?? undefined
+                : feed.error ?? machine.error ?? undefined
             }
             explorerBase={deployment.explorerUrl}
           />
@@ -355,18 +347,10 @@ function PendingCard({
   pullId,
   txHash,
   slow,
-  refundable,
-  isRefunding,
-  refundError,
-  onRefund,
 }: {
   pullId: bigint | null;
   txHash: `0x${string}` | null;
   slow: boolean;
-  refundable: boolean;
-  isRefunding: boolean;
-  refundError: string | null;
-  onRefund: () => void;
 }) {
   return (
     <Card className="w-full" font="normal">
@@ -376,7 +360,7 @@ function PendingCard({
       <CardContent font="normal" className="flex flex-col gap-3">
         <p className="text-[11px] text-muted-foreground">
           {slow
-            ? "Pyth Entropy is taking longer than usual. Keep this page open while we poll."
+            ? "Pyth Entropy is taking longer than usual. Keep this page open while we poll for the callback."
             : "Your pull is in flight. The entropy callback usually lands within a few seconds."}
         </p>
         {pullId !== null ? (
@@ -385,51 +369,10 @@ function PendingCard({
           </p>
         ) : null}
         {txHash ? <TxLink hash={txHash} /> : null}
-
-        {refundable ? (
-          <div className="flex flex-col gap-2 border-t-2 border-border/60 pt-3">
-            <p className="text-[11px] text-muted-foreground">
-              This pull has been pending for over ten minutes. You can refund the
-              1 USDC pull price instead of waiting.
-            </p>
-            <Button
-              size="sm"
-              variant="outline"
-              className="min-h-11 w-full"
-              disabled={isRefunding}
-              onClick={onRefund}
-            >
-              {isRefunding ? "Refunding…" : "Refund pull"}
-            </Button>
-            {refundError ? (
-              <p className="text-[10px] text-destructive" role="alert">
-                {refundError}
-              </p>
-            ) : null}
-          </div>
-        ) : (
-          <p className="border-t-2 border-border/60 pt-3 text-[10px] text-muted-foreground">
-            If the callback never arrives, a refund unlocks 10 minutes after the request.
-          </p>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function RefundedCard({ refundTxHash }: { refundTxHash: `0x${string}` | null }) {
-  return (
-    <Card className="w-full border-x-4 border-[#ffd45f]" font="normal">
-      <CardHeader font="normal" className="pb-2">
-        <CardTitle className="retro text-[10px] text-[#ffd45f]">PULL REFUNDED</CardTitle>
-      </CardHeader>
-      <CardContent font="normal" className="flex flex-col gap-2">
-        <p className="text-[11px] text-muted-foreground">
-          The entropy callback did not arrive in time, so the pull price was
-          returned. If the machine could not send it immediately, it appears in
-          your claimable balance.
+        <p className="border-t-2 border-border/60 pt-3 text-[10px] text-muted-foreground">
+          The payout is delivered in the Pyth Entropy callback. If it does not arrive,
+          the pull stays pending on-chain — check the explorer.
         </p>
-        {refundTxHash ? <TxLink hash={refundTxHash} /> : null}
       </CardContent>
     </Card>
   );

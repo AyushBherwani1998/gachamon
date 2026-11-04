@@ -2,12 +2,12 @@
 
 import { useCallback, useMemo, useState } from "react";
 import type { Address, Hex } from "viem";
-import { BaseError } from "viem";
 import { useAccount, usePublicClient, useReadContract, useReadContracts, useWriteContract } from "wagmi";
 
 import { clawMachineAbi } from "@/abi/clawMachine";
 import { erc20Abi } from "@/abi/erc20";
 import { deployment, isDeployed, IS_DEMO_MODE } from "@/config/deployments";
+import { friendlyTxError } from "@/lib/errors";
 import { shortAddress } from "@/lib/format";
 
 interface ReadResult {
@@ -27,21 +27,9 @@ export interface OwedBalance {
   decimals: number;
 }
 
-function friendlyError(error: unknown): string {
-  if (error instanceof BaseError) {
-    if (/user rejected|denied/i.test(error.shortMessage)) return "Transaction cancelled.";
-    return error.shortMessage;
-  }
-  if (error instanceof Error) {
-    if (/user rejected|denied/i.test(error.message)) return "Transaction cancelled.";
-    return error.message;
-  }
-  return "Could not claim the balance.";
-}
-
 /**
- * Tokens whose automatic transfer failed are recorded in `owed(player, token)`.
- * This hook exposes them so the player can retry with `withdrawOwed()`.
+ * Tokens whose automatic transfer failed are recorded on-chain and returned by
+ * `getOwedBalance(player)`. `withdrawOwed()` retries every token at once.
  */
 export function useOwed() {
   const { address, chainId } = useAccount();
@@ -57,35 +45,21 @@ export function useOwed() {
     chainId === deployment.chainId &&
     isDeployed(deployment.clawMachine);
 
-  const stocksRead = useReadContract({
+  const owedRead = useReadContract({
     address: deployment.clawMachine,
     abi: clawMachineAbi,
-    functionName: "getStocks",
+    functionName: "getOwedBalance",
+    args: address ? [address] : undefined,
     chainId: deployment.chainId,
-    query: { enabled },
+    query: { enabled, refetchInterval: 5_000 },
   });
 
-  const stockAddresses = useMemo<Address[]>(() => {
-    const onchain = (stocksRead.data as readonly Address[] | undefined) ?? [];
-    return onchain.length > 0 ? [...onchain] : [];
-  }, [stocksRead.data]);
-
-  const tokens = useMemo<Address[]>(() => {
-    const list = [...stockAddresses];
-    if (isDeployed(deployment.usdc)) list.push(deployment.usdc);
-    return list;
-  }, [stockAddresses]);
-
-  const owedRead = useReadContracts({
-    contracts: tokens.map((token) => ({
-      address: deployment.clawMachine,
-      abi: clawMachineAbi,
-      functionName: "owed" as const,
-      args: address ? ([address, token] as const) : undefined,
-      chainId: deployment.chainId,
-    })),
-    query: { enabled: enabled && Boolean(address) && tokens.length > 0, refetchInterval: 5_000 },
-  });
+  const [stockAddresses, amounts] = useMemo(() => {
+    const tuple = owedRead.data as
+      | readonly [readonly Address[], readonly bigint[]]
+      | undefined;
+    return [tuple?.[0] ?? [], tuple?.[1] ?? []] as const;
+  }, [owedRead.data]);
 
   const symbolsRead = useReadContracts({
     contracts: stockAddresses.map((token) => ({
@@ -98,34 +72,20 @@ export function useOwed() {
   });
 
   const entries = useMemo<OwedBalance[]>(() => {
-    const owedData = owedRead.data as readonly ReadResult[] | undefined;
-    const result: OwedBalance[] = [];
-    stockAddresses.forEach((token, index) => {
-      const amount = pick<bigint>(owedData, index) ?? 0n;
-      if (amount === 0n) return;
+    return stockAddresses.flatMap((token, index) => {
+      const amount = amounts[index] ?? 0n;
+      if (amount === 0n) return [];
       const symbol =
         pick<string>(symbolsRead.data as readonly ReadResult[] | undefined, index) ??
-        deployment.stocks.find((stock) => stock.address.toLowerCase() === token.toLowerCase())
-          ?.symbol ??
         shortAddress(token);
-      result.push({ address: token, symbol, amount, decimals: 18 });
+      return [{ address: token, symbol, amount, decimals: 18 }];
     });
-    const usdcIndex = stockAddresses.length;
-    const usdcOwed = pick<bigint>(owedData, usdcIndex) ?? 0n;
-    if (usdcOwed > 0n && isDeployed(deployment.usdc)) {
-      result.push({
-        address: deployment.usdc,
-        symbol: "USDC",
-        amount: usdcOwed,
-        decimals: 6,
-      });
-    }
-    return result;
-  }, [owedRead.data, symbolsRead.data, stockAddresses]);
+  }, [stockAddresses, amounts, symbolsRead.data]);
 
   const refetch = useCallback(() => {
     void owedRead.refetch();
-  }, [owedRead]);
+    void symbolsRead.refetch();
+  }, [owedRead, symbolsRead]);
 
   const withdraw = useCallback(async () => {
     if (!address || !publicClient || !isDeployed(deployment.clawMachine)) return;
@@ -143,7 +103,7 @@ export function useOwed() {
       await publicClient.waitForTransactionReceipt({ hash: txHash });
       refetch();
     } catch (err) {
-      setError(friendlyError(err));
+      setError(friendlyTxError(err));
     } finally {
       setIsWithdrawing(false);
     }

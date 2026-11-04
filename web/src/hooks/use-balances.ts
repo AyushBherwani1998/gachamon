@@ -23,7 +23,8 @@ function pick<T>(data: readonly ReadResult[] | undefined, index: number): T | un
 
 export function useBalances(): BalanceSnapshot {
   const { address, chainId } = useAccount();
-  const enabled = Boolean(address) && chainId === deployment.chainId && !IS_DEMO_MODE;
+  const enabled =
+    !IS_DEMO_MODE && Boolean(address) && chainId === deployment.chainId;
   const machineDeployed = isDeployed(deployment.clawMachine);
 
   const monRead = useBalance({
@@ -53,19 +54,29 @@ export function useBalances(): BalanceSnapshot {
     },
   });
 
-  const stocksRead = useReadContract({
+  const tokensRead = useReadContract({
     address: deployment.clawMachine,
     abi: clawMachineAbi,
-    functionName: "getStocks",
+    functionName: "getSupportedTokens",
     chainId: deployment.chainId,
     query: { enabled: enabled && machineDeployed },
   });
 
   const stockAddresses = useMemo<Address[]>(() => {
-    const onchain = (stocksRead.data as readonly Address[] | undefined) ?? [];
-    if (onchain.length > 0) return [...onchain];
-    return deployment.stocks.map((stock) => stock.address);
-  }, [stocksRead.data]);
+    const onchain = tokensRead.data as readonly Address[] | undefined;
+    return onchain ? [...onchain] : [];
+  }, [tokensRead.data]);
+
+  const infoRead = useReadContracts({
+    contracts: stockAddresses.map((token) => ({
+      address: deployment.clawMachine,
+      abi: clawMachineAbi,
+      functionName: "tokenInfo" as const,
+      args: [token] as const,
+      chainId: deployment.chainId,
+    })),
+    query: { enabled: enabled && stockAddresses.length > 0, staleTime: 60_000 },
+  });
 
   const balanceContracts = useMemo(
     () =>
@@ -105,8 +116,6 @@ export function useBalances(): BalanceSnapshot {
   const stocks = stockAddresses.map((token, index) => {
     const symbol =
       pick<string>(symbolsRead.data as readonly ReadResult[] | undefined, index) ??
-      deployment.stocks.find((stock) => stock.address.toLowerCase() === token.toLowerCase())
-        ?.symbol ??
       shortAddress(token);
     return {
       address: token,
@@ -124,7 +133,8 @@ export function useBalances(): BalanceSnapshot {
       void monRead.refetch();
       void usdcRead.refetch();
       void allowanceRead.refetch();
-      void stocksRead.refetch();
+      void tokensRead.refetch();
+      void infoRead.refetch();
       void balancesRead.refetch();
       void symbolsRead.refetch();
     },
