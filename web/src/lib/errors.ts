@@ -10,7 +10,7 @@ function mapRevert(reason: string): string | null {
   if (/stale price|price is stale|stale|too old|price is not updated/i.test(reason)) {
     return "The Chainlink price is stale. Try again in a moment.";
   }
-  if (/invalid price|price feed|no price/i.test(reason)) {
+  if (/invalid price|invalid feed|price feed|no price/i.test(reason)) {
     return "The machine could not read a valid Chainlink price. Try again in a moment.";
   }
   if (/paused|enforcedpause/i.test(reason)) {
