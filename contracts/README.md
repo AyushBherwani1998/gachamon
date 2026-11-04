@@ -1,281 +1,305 @@
 # ClawMachine Smart Contracts
 
-Smart contracts for the xStocks Claw Machine game on Monad mainnet (chain 143).
+Pixel-art xStocks claw machine on Monad. A player pays **1 USDC** per pull plus the
+Pyth Entropy fee in MON and receives tokenized stocks (xStocks) in the entropy
+callback.
 
-## Overview
+- **Common (98%)**: 0.73 USDC worth of xStocks
+- **Legendary (2%)**: `pullPrice * legendaryMultiplier` worth of xStocks (10x by default)
 
-Players pay 1 USDC per pull to win xStocks (tokenized stocks). Each pull uses Pyth Entropy for on-chain randomness:
-- **Common (98%)**: Player receives 0.73 USDC worth of xStocks
-- **Legendary (2%)**: Player receives 10 USDC worth of xStocks (10x payout)
+The house keeps the rest as revenue. Payouts use the price snapshot taken when the
+pull is requested, so the result cannot be front-run by a price update.
 
-## Prerequisites
+**Prices: Chainlink Data Feeds. Randomness: Pyth Entropy.**
 
-- [Foundry](https://book.getfoundry.sh/getting-started/installation) >= 1.8
+## Contracts and dependencies
 
-```bash
-curl -L https://foundry.paradigm.xyz | bash
-foundryup
-```
+All Solidity dependencies are vendored as plain directories (no submodules):
 
-## Installation
+| Path | What |
+|------|------|
+| `lib/forge-std` | Foundry test/script library |
+| `lib/openzeppelin-contracts` | OpenZeppelin Contracts v5 (Ownable, Pausable, ReentrancyGuard, ERC20) |
+| `src/pyth` | Pyth Entropy V2 SDK (`IEntropyV2`, `IEntropyConsumer`, events/structs) |
+| `src/interfaces` | Minimal `IAggregatorV3`, `IXStock` and the unused `IPriceOracle` |
 
-```bash
-# Install dependencies
-forge install
-```
+`foundry.toml` targets `solc 0.8.28` with `evm_version = "cancun"`. `forge build`
+and `forge test` work from a clean clone without `forge install`.
 
 ## Build
 
 ```bash
+cd contracts
 forge build
 ```
 
-## Test
+## Unit tests
 
-### Run all tests
 ```bash
-forge test -vv
+forge test
 ```
 
-### Run specific test file
-```bash
-forge test --match-contract ClawMachineTest -vvv
-```
+The unit tests use `MockPriceFeed`, `MockEntropy` and mock ERC20s and need no network
+access. They cover common/legendary payouts, Chainlink staleness and zero/negative
+answers, the wrapped-feed `multiplier()` conversion, inventory caps across 3 tokens,
+failed transfers/owed balances, treasury accounting, reservations, refunds, owner
+controls and fee forwarding.
 
-### Run with gas reporting
-```bash
-forge test --gas-report
-```
+## Mainnet fork tests
 
-### Fork tests (against Monad mainnet)
+The fork tests exercise the real Monad mainnet USDC, the three xStocks, the real
+Chainlink proxies and the real Pyth Entropy contract. They only need an RPC:
+
 ```bash
 MONAD_RPC=https://rpc.monad.xyz forge test --match-contract ClawMachineForkTest -vv
 ```
 
-## Deploy
+No API key or off-chain price update is involved: the prices are read from the
+Chainlink proxies on-chain.
 
-### Dry run (simulation)
-```bash
-forge script script/Deploy.s.sol --rpc-url https://rpc.monad.xyz
+The pull tests impersonate `0xb2dC0a93841Ac49Ce0664e45D6575BA31AEA7C0e`, which holds
+MON, USDC and the xStocks on mainnet, and move its inventory into the machine:
+
+| Token | Actor balance | Approx USD |
+|-------|---------------|-----------|
+| TSLAx | 0.02356 | 9.04 |
+| NVDAx | 0.03845 | 7.99 |
+| SPYx | 0.01058 | 8.02 |
+
+That is about 25 USD, enough for the default 10x legendary payout (10 USD).
+
+`test_Fork_FullPull_RealChainlinkAndEntropy`:
+
+1. Moves the actor's TSLAx, NVDAx and SPYx into the machine as inventory.
+2. Calls `pull(userRandomNumber)` with `value = getFee()` (the real Entropy fee).
+3. Reads the Entropy sequence number from `PullRequested`.
+4. Simulates the provider reveal with `vm.prank(ENTROPY)` and
+   `_entropyCallback{gas: callbackGasLimit}(seq, provider, random)`.
+5. Asserts the received stock is worth 0.73 USD at the snapshot prices (within 1%),
+   the reservation is released and `PullResolved` carries the right pull id.
+
+`test_Fork_LegendaryPull` does the same with a random number that rolls below 200 bps
+and asserts a 10 USD payout at the default 10x.
+
+`test_Fork_GetTokenPrice` checks the Chainlink conversion against the raw feed:
+`answer * 1e6 / 10**8 * 1e18 / multiplier()`.
+
+### Callback gas
+
+The fork run measures the callback itself (3-token payout):
+
+```
+Callback gas used: 102590   (common, 0.73 USD)
+Callback gas used: 102705   (legendary, 10 USD)
 ```
 
-### Actual deployment (requires private key)
-```bash
-# Set private key
-export PRIVATE_KEY=<your-private-key>
+Foundry uses the Ethereum gas schedule; Monad cold storage/account access is more
+expensive. Following `max(500_000, 2 x measured)`, rounded up to 50,000, the default
+is **`callbackGasLimit = 500_000`**. On mainnet the Entropy fee is a flat 1.4 MON up
+to 1M gas (1.6 MON at 1.5M), so raising it to 800k costs nothing extra if a future
+token mix needs more headroom. The owner can change it:
 
-# Deploy to Monad mainnet
-forge script script/Deploy.s.sol --rpc-url monad --broadcast --verify
-
-# Or use private key directly (not recommended for production)
-forge script script/Deploy.s.sol --rpc-url monad --broadcast --private-key <key>
+```solidity
+claw.setCallbackGasLimit(800_000);
 ```
 
-### Post-deployment steps
+## Deploy to Monad mainnet (chain 143)
 
-1. **Fund inventory**: Transfer ~20 USDC worth of xStocks to the contract
-   ```solidity
-   // Approve xStocks tokens to ClawMachine
-   TSLAx.approve(clawMachine, amount);
-   
-   // Refill inventory
-   clawMachine.refillInventory(
-       [TSLAx, NVDAx, AAPLx, SPYx],
-       [amounts...]
-   );
+No key is read from the environment. Pass it with `--private-key`, `--account` or
+`--ledger`; the broadcaster becomes the owner.
+
+```bash
+forge script script/Deploy.s.sol \
+  --rpc-url monad \
+  --account deployer \
+  --broadcast \
+  --verify --verifier sourcify \
+  --verifier-url https://sourcify-api-monad.blockvision.org/
+```
+
+Environment options:
+
+| Variable | Default | Meaning |
+|----------|---------|---------|
+| `STOCKS` | `TSLAx,NVDAx,SPYx` | Comma-separated subset of `TSLAx,NVDAx,SPYx,QQQx,SPCXx` |
+| `LEGENDARY_MULTIPLIER` | unset (10) | Calls `setParameters` changing only the multiplier |
+| `CALLBACK_GAS_LIMIT` | unset (500000) | Calls `setCallbackGasLimit` |
+
+The symbol map:
+
+| Symbol | Token | Chainlink feed |
+|--------|-------|----------------|
+| `TSLAx` | `0x8aD3c73F833d3F9A523aB01476625F269aEB7Cf0` | `0xE42022cCe1913626AE4297B99291d3Ba24Cc9281` |
+| `NVDAx` | `0xc845b2894dBddd03858fd2D643B4eF725fE0849d` | `0x03ffa4673c060339E6a8E5Ba1a12B3301c966bf0` |
+| `SPYx` | `0x90A2a4c76b5D8c0bc892A69EA28Aa775a8f2dD48` | `0x2e2dA5717eDE960F8b77Af4cFcBDC4Ca3099006D` |
+| `QQQx` | `0xa753A7395cAe905Cd615Da0B82A53E0560f250af` | `0x7CA45B17D8D43059a222dEC5d991B613F61c02d9` |
+| `SPCXx` | `0x68fa48B1C2FE52b3D776E1953e0E782b5044Ce28` | `0x7577154038de77668d0188baF47707EDcd86d0b3` |
+
+The script writes `deployments/monad-mainnet.json` only when broadcasting (not on a
+dry run), with the machine address, deploy block, tokens, Chainlink feeds, Entropy,
+provider and parameters.
+
+### Post-deploy steps
+
+1. **Send inventory.** The machine pays out from its own balance. Send the xStocks you
+   enabled (`TSLAx`, `NVDAx` and `SPYx` by default; at least 10 USD total for a 10x
+   legendary):
+
+   ```bash
+   cast send 0x8aD3c73F833d3F9A523aB01476625F269aEB7Cf0 \
+     "transfer(address,uint256)" <CLAW_MACHINE> <AMOUNT> \
+     --rpc-url monad --account deployer
    ```
 
-2. **Setup price keeper**: Deploy a keeper bot to call `setPrices()` every minute
-   - Read prices from xStocks API: `https://api.xstocks.fi/api/v2/{symbol}/price-data`
-   - Call `setPrices([tokens], [prices])` with 6-decimal USDC prices per 1e18 token units
+   Repeat for `NVDAx` and `SPYx`. Alternatively `refillInventory([...], [...])` after
+   approving the machine. xStocks rebase: `balanceOf` is in underlying-share units
+   and the machine prices those units at the feed price divided by `multiplier()`.
 
-3. **Update keeper address** (if using separate keeper account):
+2. **Tune parameters if needed.**
+
    ```solidity
-   clawMachine.setKeeper(keeperAddress);
+   claw.setParameters(1_000_000, 7300, 200, 10); // price, common bps, rarity bps, multiplier
+   claw.setMaxPriceAge(7200);                    // slower than the 1h heartbeat
+   claw.setCallbackGasLimit(800_000);
    ```
 
-4. **Transfer ownership** (recommended: use multi-sig):
-   ```solidity
-   clawMachine.transferOwnership(multisigAddress);
-   ```
+3. **Backend / frontend.** Read `getSupportedTokens()` and
+   `tokenInfo(token)` → `(priceFeed, decimals, supported)`. Use `getTokenPrice(token)`
+   for the live USD price, `getFee()` right before sending `pull(bytes32)` with that
+   exact `value`, and watch `PullRequested` / `PullResolved`. There is no price update
+   payload anymore.
 
-## Contract Architecture
+4. **Ownership.** Transfer to a multisig if the demo is not the final owner.
 
-### Core Contracts
+## Deploy to Monad testnet (chain 10143)
 
-- **ClawMachine.sol**: Main game contract
-  - Handles USDC payments and xStocks payouts
-  - Integrates with Pyth Entropy for randomness
-  - Manages inventory reservations
-  - Direct transfer of xStocks to player in callback
-  - Fallback to owed balance for failed transfers
+Monad testnet has no USDC and no Chainlink equity feeds, so the script deploys mocks
+and wires the machine to the **real** testnet Entropy deployment:
 
-### Interfaces
+```bash
+forge script script/DeployTestnet.s.sol \
+  --rpc-url monad_testnet \
+  --account deployer \
+  --broadcast \
+  --verify --verifier sourcify \
+  --verifier-url https://sourcify-api-monad.blockvision.org/
+```
 
-- **IEntropy.sol**: Pyth Entropy interface for on-chain randomness
-- **IPriceOracle.sol**: Future oracle integration (Chainlink/Pyth price feeds)
+The script:
 
-### Key Features
+- deploys `MockUSDC` (`Mock USD Coin`, symbol `USDC`, 6 decimals) with
+  `faucet()` minting 100 USDC to the caller,
+- deploys `MockStock` TSLAx (18 decimals, owner mint, `multiplier() = 1e18`),
+- deploys `MockPriceFeed` (AggregatorV3-compatible, 8 decimals) seeded at 383.00 USD;
+  the owner can refresh it with `setAnswer(int256)` (which sets
+  `updatedAt = block.timestamp`),
+- deploys `ClawMachine` and adds TSLAx with that mock feed,
+- mints 1 TSLAx into the machine as inventory.
 
-1. **Pyth Entropy Integration**
-   - Uses `requestV2()` for randomness requests
-   - Callback delivers random number to determine rarity and stock mix
-   - Gas-efficient callback (Monad charges by gas LIMIT)
+Writes `deployments/monad-testnet.json` only when broadcasting.
 
-2. **Inventory Management**
-   - Reserves 10 USDC worth of inventory per pull
-   - Releases unused reservation after resolution
-   - Blocks pulls if inventory insufficient
+## Addresses
 
-3. **Direct Transfer**
-   - xStocks transferred to player's wallet in `entropyCallback`
-   - No separate claim step or custody
-   - Fallback to owed balance if transfer fails
+### Monad mainnet (143)
 
-4. **Price Management**
-   - Keeper updates prices every minute
-   - Price staleness check (default: 5 minutes)
-   - Future oracle hook for decentralization
-
-5. **Safety Features**
-   - ReentrancyGuard on all state-changing functions
-   - Pausable in case of emergency
-   - Owner controls for parameters and treasury
-
-## Monad Mainnet Addresses
-
-| Asset/Contract | Address |
-|----------------|---------|
+| Contract | Address |
+|----------|---------|
 | USDC (6 decimals) | `0x754704Bc059F8C67012fEd69BC8A327a5aafb603` |
-| Pyth Entropy | `0xD458261E832415CFd3BAE5E416FdF3230ce6F134` |
-| TSLAx (Tesla) | `0x8ad3c73f833d3f9a523ab01476625f269aeb7cf0` |
-| AAPLx (Apple) | `0x9d275685dc284c8eb1c79f6aba7a63dc75ec890a` |
-| NVDAx (Nvidia) | `0xc845b2894dbddd03858fd2d643b4ef725fe0849d` |
-| SPYx (S&P 500) | `0x90a2a4c76b5d8c0bc892a69ea28aa775a8f2dd48` |
+| Pyth Entropy V2 | `0xD458261E832415CFd3BAE5E416FdF3230ce6F134` |
+| Entropy default provider | `0x52DeaA1c84233F7bb8C8A45baeDE41091c616506` |
+| TSLAx | `0x8aD3c73F833d3F9A523aB01476625F269aEB7Cf0` |
+| NVDAx | `0xc845b2894dBddd03858fd2D643B4eF725fE0849d` |
+| SPYx | `0x90A2a4c76b5D8c0bc892A69EA28Aa775a8f2dD48` |
+| QQQx | `0xa753A7395cAe905Cd615Da0B82A53E0560f250af` |
+| SPCXx | `0x68fa48B1C2FE52b3D776E1953e0E782b5044Ce28` |
 
-**RPC**: `https://rpc.monad.xyz`
+Chainlink feeds are listed in the deploy table above. `PRICE_FEEDS.md` records the
+live verification commands and the wrapped/multiplier conversion.
 
-## Gas Considerations (Monad-Specific)
+RPC: `https://rpc.monad.xyz` · Explorer: `https://monadscan.com`
 
-### Gas Charged by Limit
-Monad charges gas based on the gas **LIMIT**, not actual usage. Set realistic limits to avoid overpaying.
+### Monad testnet (10143)
 
-### Cold Storage Access
-Cold SLOAD/SSTORE costs **10,100 gas** on Monad (vs 2,100 on Ethereum). Minimize cold storage access in hot paths.
+| Contract | Address |
+|----------|---------|
+| Pyth Entropy V2 | `0x825c0390f379C631f3Cf11A82a37D20BddF93c07` |
+| Entropy default provider | `0x6CC14824Ea2918f5De5C2f75A9Da968ad4BD6344` |
 
-### Callback Gas Limit
-The `entropyCallback` function must handle up to 4 ERC-20 transfers (one per xStocks token). Recommended callback gas limit: **100,000+ gas** to cover:
-- 4 cold ERC-20 transfers (~40,400 gas)
-- Callback logic (~20,000 gas)
-- Safety margin
+RPC: `https://testnet-rpc.monad.xyz` · Explorer: `https://testnet.monadscan.com`
 
-## Economics
+**Entropy address note.** The mainnet Entropy address `0xD458...` also has code on
+testnet, but its default provider is not registered there: `requestV2` reverts and
+`getProviderInfoV2(defaultProvider)` is all zeroes. The live testnet Entropy V2
+deployment is `0x825c...` (provider registered, `getFeeV2(provider, 500000)` returns
+about 0.128 MON). This was verified live on 2026-11-04; the deploy script uses it.
 
-- **Player EV**: 0.9154 USDC per 1 USDC pull (~8.5% house edge)
-  - Common (98%): 0.98 × 0.73 = 0.7154
-  - Legendary (2%): 0.02 × 10 = 0.2000
-- **Break-even legendary rate**: ~2.9%
-- **Inventory requirements**: 20 USDC covers ~2 back-to-back legendaries or ~27 commons
+## Price feeds and the multiplier conversion
 
-## Testing
-
-### Test Coverage
-
-- ✅ Common pull (98% chance)
-- ✅ Legendary pull (2% chance)
-- ✅ Insufficient inventory blocks pull
-- ✅ Stale price blocks pull
-- ✅ Failed transfer creates owed balance
-- ✅ Owed balance withdrawal
-- ✅ Treasury accounting
-- ✅ Reservation release
-- ✅ Multiple simultaneous pulls
-- ✅ Owner controls (pause, parameters, withdrawal)
-- ✅ Keeper price updates
-- ✅ Excess MON refunded
-- ✅ Fork tests (Monad mainnet)
-
-### Run specific tests
-
-```bash
-# Test common pull
-forge test --match-test test_CommonPull -vvv
-
-# Test legendary pull
-forge test --match-test test_LegendaryPull -vvv
-
-# Test failed transfers
-forge test --match-test test_FailedTransferCreatesOwedBalance -vvv
-
-# Test inventory management
-forge test --match-test test_InsufficientInventoryBlocksPull -vvv
-```
-
-## Security Considerations
-
-### Pre-Demo Checklist
-
-- [ ] Test tiny xStocks transfers to/from contract (check for allowlist/blacklist)
-- [ ] Verify xStocks token decimals
-- [ ] Test with actual Monad RPC (fork tests)
-- [ ] Deploy to Monad testnet first (if available)
-- [ ] Verify Pyth Entropy callback gas limit is sufficient
-- [ ] Test price staleness behavior
-- [ ] Verify USDC approval and transfer
-- [ ] Test pause/unpause functionality
-- [ ] Verify owner controls work as expected
-- [ ] Test multiple simultaneous pulls
-- [ ] Monitor gas costs on Monad
-
-### Known Risks
-
-1. **Centralized Keeper**: Single point of failure for price updates
-   - Mitigation: Monitor keeper, plan oracle migration
-   
-2. **xStocks Restrictions**: Tokens may have allowlist/blacklist or market halts
-   - Mitigation: Test transfers, monitor halt status
-   
-3. **Callback Gas Limit**: Monad charges by limit, not usage
-   - Mitigation: Set reasonable limit, test thoroughly
-
-4. **Corporate Actions**: xStocks may split/reverse-split
-   - Mitigation: Monitor multipliers from xStocks API
-
-## Development
-
-### Project Structure
+The Chainlink feeds price the **wrapped, non-rebasing ERC-4626 xStock**. One wrapped
+share is `multiplier()` units of the rebasing xStock the machine holds, so the price
+of one whole xStock unit is:
 
 ```
+priceUsd6Per1e18XStock = answer * 1e6 / 10**feedDecimals * 1e18 / multiplier()
+```
+
+Feed decimals are 8 and the heartbeat is 3600 s (deviation 0.05%, market hours 24/5).
+`maxPriceAge` defaults to 3900 s; the owner can raise it for quiet periods.
+`getTokenPrice(token)` returns `(priceUsd6, updatedAt)`, and `getInventoryValue()` and
+`canPull()` use the same live conversion.
+
+## Entropy integration
+
+The contract inherits `IEntropyConsumer` from `src/pyth`:
+
+- `getEntropy()` returns the Entropy address, so `_entropyCallback` accepts calls
+  only from Entropy.
+- The callback body is `entropyCallback(uint64,address,bytes32) internal override`.
+- Requests use the real V2 API:
+
+  ```solidity
+  uint256 fee = entropy.getFeeV2(entropyProvider, callbackGasLimit);
+  uint64 seq = entropy.requestV2{value: fee}(
+      entropyProvider,
+      userRandomNumber,
+      callbackGasLimit
+  );
+  ```
+
+The old `requestV2(provider, random, bool)` / `getFeeV2(provider)` calls do not
+exist in Entropy V2 and revert on Monad.
+
+## Economic notes
+
+- Player EV at defaults: `0.98 * 0.73 + 0.02 * 10 = 0.9154` USDC per 1 USDC pull.
+- Each pending pull reserves the full legendary payout (`pullPrice * multiplier`) of
+  inventory until it resolves.
+- Payouts are capped at each token's current balance at the snapshot price; any
+  remainder is redistributed to tokens with spare inventory, so an empty token can no
+  longer turn a payout into an IOU. Owed balances only appear when the whole
+  inventory is short.
+- A pull whose callback never lands can be refunded by the owner after 10 minutes
+  (`refundStuckPull`), which releases the reservation and returns the pull price.
+
+## Project layout
+
+```text
 contracts/
 ├── src/
-│   ├── ClawMachine.sol          # Main contract
-│   └── interfaces/
-│       ├── IEntropy.sol          # Pyth Entropy interface
-│       └── IPriceOracle.sol      # Oracle interface
-├── test/
-│   ├── ClawMachine.t.sol         # Unit tests
-│   ├── ClawMachineFork.t.sol     # Fork tests
-│   └── mocks/
-│       ├── MockERC20.sol         # Mock ERC20 token
-│       ├── MockEntropy.sol       # Mock Pyth Entropy
-│       └── MockFailingToken.sol  # Token that can fail transfers
-├── script/
-│   └── Deploy.s.sol              # Deployment script
-├── foundry.toml                  # Foundry configuration
-└── README.md                     # This file
+│   ├── ClawMachine.sol
+│   ├── interfaces/          IAggregatorV3, IXStock, IPriceOracle
+│   ├── mocks/               MockUSDC, MockStock, MockPriceFeed
+│   └── pyth/                Entropy V2 SDK
+├── script/                  Deploy.s.sol, DeployTestnet.s.sol
+├── test/                    unit tests, mocks, ClawMachineFork.t.sol
+├── lib/                     forge-std, openzeppelin-contracts
+└── foundry.toml
 ```
 
-### Foundry Configuration
+## Contract ABI
 
-- **Solidity version**: 0.8.24
-- **Optimizer**: Enabled (200 runs)
-- **RPC endpoint**: `monad = https://rpc.monad.xyz`
+Compiled artifacts (including the full ABI) are written to:
 
-### Dependencies
-
-- OpenZeppelin Contracts (access control, security)
-- Forge Standard Library (testing utilities)
-
-## License
-
-MIT
+```
+contracts/out/ClawMachine.sol/ClawMachine.json
+```

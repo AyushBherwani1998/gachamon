@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {IEntropyConsumer} from "../../src/interfaces/IEntropy.sol";
+import {IEntropyConsumer} from "../../src/pyth/IEntropyConsumer.sol";
 
 contract MockEntropy {
     uint256 public fee = 0.001 ether; // 0.001 MON
     uint64 private nextSequence = 1;
     address public defaultProvider = 0x52DeaA1c84233F7bb8C8A45baeDE41091c616506;
+    uint32 public lastGasLimit;
 
     mapping(uint64 => address) public sequenceToConsumer;
 
@@ -18,21 +19,24 @@ contract MockEntropy {
         defaultProvider = provider;
     }
 
-    function getFeeV2(address /* provider */) external view returns (uint256) {
-        return fee;
+    /// @dev Same shape as IEntropyV2.getFeeV2(address,uint32).
+    function getFeeV2(address /* provider */, uint32 /* gasLimit */) external view returns (uint128) {
+        return uint128(fee);
     }
 
     function getDefaultProvider() external view returns (address) {
         return defaultProvider;
     }
 
+    /// @dev Same shape as IEntropyV2.requestV2(address,bytes32,uint32).
     function requestV2(
         address, /* provider */
         bytes32, /* userRandomNumber */
-        bool /* useBlockhash */
+        uint32 gasLimit
     ) external payable returns (uint64 sequenceNumber) {
         require(msg.value >= fee, "Insufficient fee");
 
+        lastGasLimit = gasLimit;
         sequenceNumber = nextSequence++;
         sequenceToConsumer[sequenceNumber] = msg.sender;
 
@@ -59,7 +63,7 @@ contract MockEntropy {
         address consumer = sequenceToConsumer[sequenceNumber];
         require(consumer != address(0), "Invalid sequence");
 
-        IEntropyConsumer(consumer).entropyCallback(
+        IEntropyConsumer(consumer)._entropyCallback(
             sequenceNumber,
             defaultProvider,
             randomNumber

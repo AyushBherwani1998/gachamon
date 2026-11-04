@@ -7,15 +7,16 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
-import {IEntropy, IEntropyConsumer} from "./interfaces/IEntropy.sol";
-import {IPyth} from "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
-import {PythStructs} from "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
+import {IEntropyV2} from "./pyth/IEntropyV2.sol";
+import {IEntropyConsumer} from "./pyth/IEntropyConsumer.sol";
+import {IAggregatorV3} from "./interfaces/IAggregatorV3.sol";
+import {IXStock} from "./interfaces/IXStock.sol";
 
 /**
  * @title ClawMachine
- * @notice xStocks claw machine game with Pyth price feeds and Pyth Entropy randomness
+ * @notice xStocks claw machine game with Chainlink price feeds and Pyth Entropy randomness
  * @dev Players pay USDC to pull cards and win xStocks (tokenized stocks)
- * @dev Prices are fetched via Pyth pull oracle (passed in by frontend from Hermes)
+ * @dev Prices are read from Chainlink AggregatorV3 feeds at pull time and snapshotted
  */
 contract ClawMachine is IEntropyConsumer, ReentrancyGuard, Pausable, Ownable {
     using SafeERC20 for IERC20;
@@ -59,11 +60,16 @@ contract ClawMachine is IEntropyConsumer, ReentrancyGuard, Pausable, Ownable {
 
     event MaxPriceAgeUpdated(uint256 oldMaxAge, uint256 newMaxAge);
 
+    event CallbackGasLimitUpdated(uint32 oldLimit, uint32 newLimit);
+
+    event PullRefunded(uint256 indexed pullId, address indexed player, uint256 amount);
+
     // ============ Structs ============
 
     struct Pull {
         address player;
         uint64 entropySequence;
+        uint64 requestedAt;
         uint256 reservedValue;
         bool resolved;
         // Snapshot of prices at pull request time (for callback)
@@ -71,7 +77,7 @@ contract ClawMachine is IEntropyConsumer, ReentrancyGuard, Pausable, Ownable {
     }
 
     struct TokenInfo {
-        bytes32 pythFeedId; // Pyth price feed ID
+        address priceFeed; // Chainlink AggregatorV3 proxy
         uint8 decimals;
         bool supported;
     }
@@ -80,18 +86,21 @@ contract ClawMachine is IEntropyConsumer, ReentrancyGuard, Pausable, Ownable {
 
     // Core contracts
     IERC20 public immutable usdc;
-    IEntropy public immutable entropy;
+    IEntropyV2 public immutable entropy;
     address public immutable entropyProvider;
-    IPyth public immutable pyth;
 
     // Configuration
     uint256 public pullPrice = 1_000000; // 1 USDC (6 decimals)
     uint16 public commonPayoutBps = 7300; // 73% payout (0.73 USDC)
     uint16 public legendaryRarityBps = 200; // 2% chance (200/10000)
     uint16 public legendaryMultiplier = 10; // 10x payout
-    uint256 public maxPriceAge = 60; // 60 seconds (configurable for after-hours)
+    uint256 public maxPriceAge = 3900; // Chainlink heartbeat (3600s) + 5 minutes
 
-    // Tokens and feed IDs
+    // Gas forwarded to the Entropy callback. Monad cold storage is expensive and gas is
+    // charged on the limit, so this is a deliberate, owner-tunable tradeoff.
+    uint32 public callbackGasLimit = 500_000;
+
+    // Tokens and their Chainlink feeds
     address[] public supportedTokens;
     mapping(address => TokenInfo) public tokenInfo;
 
@@ -110,23 +119,17 @@ contract ClawMachine is IEntropyConsumer, ReentrancyGuard, Pausable, Ownable {
 
     uint256 private constant BPS_DENOMINATOR = 10000;
     uint256 private constant PRICE_PRECISION = 1e18; // Token amounts in 1e18 units
+    uint256 private constant STUCK_PULL_TIMEOUT = 10 minutes;
 
     // ============ Constructor ============
 
-    constructor(
-        address _usdc,
-        address _entropy,
-        address _pyth,
-        address initialOwner
-    ) Ownable(initialOwner) {
+    constructor(address _usdc, address _entropy, address initialOwner) Ownable(initialOwner) {
         require(_usdc != address(0), "Invalid USDC");
         require(_entropy != address(0), "Invalid Entropy");
-        require(_pyth != address(0), "Invalid Pyth");
 
         usdc = IERC20(_usdc);
-        entropy = IEntropy(_entropy);
-        entropyProvider = IEntropy(_entropy).getDefaultProvider();
-        pyth = IPyth(_pyth);
+        entropy = IEntropyV2(_entropy);
+        entropyProvider = IEntropyV2(_entropy).getDefaultProvider();
     }
 
     // ============ Player Functions ============
@@ -134,41 +137,24 @@ contract ClawMachine is IEntropyConsumer, ReentrancyGuard, Pausable, Ownable {
     /**
      * @notice Pull a card to win xStocks
      * @param userRandomNumber User-provided random number for additional entropy
-     * @param priceUpdateData Pyth price update data from Hermes API
      * @return pullId The ID of this pull
-     * @dev Frontend fetches priceUpdateData from Hermes and includes in call
-     * @dev msg.value must cover both Pyth update fee and Entropy fee
+     * @dev Prices are read from the Chainlink feeds at request time and snapshotted.
+     * @dev msg.value must cover the Pyth Entropy fee.
      */
-    function pull(bytes32 userRandomNumber, bytes[] calldata priceUpdateData)
+    function pull(bytes32 userRandomNumber)
         external
         payable
         nonReentrant
         whenNotPaused
         returns (uint256 pullId)
     {
-        // Get fees
-        uint256 pythFee = pyth.getUpdateFee(priceUpdateData);
-        uint256 entropyFee = entropy.getFeeV2(entropyProvider);
-        uint256 totalFee = pythFee + entropyFee;
-        
-        require(msg.value >= totalFee, "Insufficient fee");
+        uint256 entropyFee = entropy.getFeeV2(entropyProvider, callbackGasLimit);
+        require(msg.value >= entropyFee, "Insufficient fee");
 
-        // Update Pyth prices
-        pyth.updatePriceFeeds{value: pythFee}(priceUpdateData);
-
-        // Fetch and snapshot current prices for all tokens
+        // Fetch and snapshot live Chainlink prices for all tokens.
         uint256[] memory prices = new uint256[](supportedTokens.length);
         for (uint256 i = 0; i < supportedTokens.length; i++) {
-            address token = supportedTokens[i];
-            TokenInfo memory info = tokenInfo[token];
-            
-            PythStructs.Price memory priceData = pyth.getPriceNoOlderThan(
-                info.pythFeedId,
-                maxPriceAge
-            );
-            
-            // Convert Pyth price to USDC (6 decimals) per 1e18 token units
-            prices[i] = _convertPythPrice(priceData);
+            (prices[i], ) = _getPrice(supportedTokens[i]);
         }
 
         // Check inventory with current prices
@@ -189,7 +175,7 @@ contract ClawMachine is IEntropyConsumer, ReentrancyGuard, Pausable, Ownable {
         uint64 sequenceNumber = entropy.requestV2{value: entropyFee}(
             entropyProvider,
             userRandomNumber,
-            true // use blockhash
+            callbackGasLimit
         );
 
         // Record pull and snapshot prices
@@ -197,6 +183,7 @@ contract ClawMachine is IEntropyConsumer, ReentrancyGuard, Pausable, Ownable {
         Pull storage pullData = pulls[pullId];
         pullData.player = msg.sender;
         pullData.entropySequence = sequenceNumber;
+        pullData.requestedAt = uint64(block.timestamp);
         pullData.reservedValue = legendaryPayoutUSDC;
         pullData.resolved = false;
         
@@ -210,8 +197,8 @@ contract ClawMachine is IEntropyConsumer, ReentrancyGuard, Pausable, Ownable {
         emit PullRequested(pullId, msg.sender, sequenceNumber, pullPrice);
 
         // Refund excess MON
-        if (msg.value > totalFee) {
-            (bool success, ) = msg.sender.call{value: msg.value - totalFee}("");
+        if (msg.value > entropyFee) {
+            (bool success, ) = msg.sender.call{value: msg.value - entropyFee}("");
             require(success, "Refund failed");
         }
     }
@@ -240,17 +227,15 @@ contract ClawMachine is IEntropyConsumer, ReentrancyGuard, Pausable, Ownable {
 
     /**
      * @notice Callback function called by Pyth Entropy
+     * @dev Reached through IEntropyConsumer._entropyCallback, which verifies msg.sender
      * @dev This function must stay within gas limits (Monad charges by gas LIMIT)
-     * @dev Recommended callback gas limit: 100,000+ to cover up to 4 ERC-20 transfers
      * @dev Uses price snapshot from pull request time
      */
     function entropyCallback(
         uint64 sequenceNumber,
         address, /* provider */
         bytes32 randomNumber
-    ) external override {
-        require(msg.sender == address(entropy), "Only entropy");
-
+    ) internal override {
         uint256 pullId = sequenceToPullId[sequenceNumber];
         Pull storage pullData = pulls[pullId];
         
@@ -300,78 +285,79 @@ contract ClawMachine is IEntropyConsumer, ReentrancyGuard, Pausable, Ownable {
     // ============ View Functions ============
 
     /**
-     * @notice Check if a pull is currently possible (without price update)
-     * @dev This is approximate; actual pull() will fetch latest prices
+     * @notice Check if a pull is currently possible, using live Chainlink prices
      */
     function canPull() public view returns (bool) {
         uint256 legendaryPayoutUSDC = (pullPrice * legendaryMultiplier * BPS_DENOMINATOR) / BPS_DENOMINATOR;
-        
-        // Approximate check using stale prices (actual pull will update)
+
         uint256 inventoryValue = 0;
         for (uint256 i = 0; i < supportedTokens.length; i++) {
             address token = supportedTokens[i];
             TokenInfo memory info = tokenInfo[token];
-            
+
             if (!info.supported) continue;
 
-            // Try to get price (may revert if too stale)
-            try pyth.getPriceNoOlderThan(info.pythFeedId, maxPriceAge) returns (PythStructs.Price memory priceData) {
+            try this.getTokenPrice(token) returns (uint256 price, uint256) {
                 uint256 balance = IERC20(token).balanceOf(address(this));
                 if (balance == 0) continue;
 
-                uint256 price = _convertPythPrice(priceData);
                 uint256 balanceIn1e18 = _toStandardDecimals(balance, info.decimals);
-                uint256 valueUSDC = (balanceIn1e18 * price) / PRICE_PRECISION;
-                inventoryValue += valueUSDC;
+                inventoryValue += (balanceIn1e18 * price) / PRICE_PRECISION;
             } catch {
-                // Price too stale, can't pull
+                // Missing or stale feed: the machine cannot safely quote a pull.
                 return false;
             }
         }
-        
+
         return inventoryValue >= legendaryPayoutUSDC + pendingReservations;
     }
 
     /**
-     * @notice Get the Pyth update fee for given price data
+     * @notice Get a token's Chainlink price in USDC (6 decimals) per 1e18 token units
+     * @return priceUsd6 Price per one whole xStock unit, in USDC with 6 decimals
+     * @return updatedAt Chainlink feed update timestamp
      */
-    function getPythFee(bytes[] calldata priceUpdateData) external view returns (uint256) {
-        return pyth.getUpdateFee(priceUpdateData);
+    function getTokenPrice(address token)
+        public
+        view
+        returns (uint256 priceUsd6, uint256 updatedAt)
+    {
+        return _getPrice(token);
     }
 
     /**
      * @notice Get the Entropy fee
      */
     function getEntropyFee() external view returns (uint256) {
-        return entropy.getFeeV2(entropyProvider);
+        return entropy.getFeeV2(entropyProvider, callbackGasLimit);
     }
 
     /**
-     * @notice Get total fee for pull (Pyth + Entropy)
+     * @notice Get the total fee for a pull (Entropy only; Chainlink reads are free)
      */
-    function getTotalFee(bytes[] calldata priceUpdateData) external view returns (uint256) {
-        return pyth.getUpdateFee(priceUpdateData) + entropy.getFeeV2(entropyProvider);
+    function getFee() external view returns (uint256) {
+        return entropy.getFeeV2(entropyProvider, callbackGasLimit);
     }
 
     /**
-     * @notice Get approximate inventory value (may be stale)
+     * @notice Get inventory value at live Chainlink prices
      */
     function getInventoryValue() public view returns (uint256 totalValueUSDC) {
         uint256[] memory prices = new uint256[](supportedTokens.length);
-        
+
         for (uint256 i = 0; i < supportedTokens.length; i++) {
             address token = supportedTokens[i];
             TokenInfo memory info = tokenInfo[token];
-            
+
             if (!info.supported) continue;
 
-            try pyth.getPriceNoOlderThan(info.pythFeedId, maxPriceAge) returns (PythStructs.Price memory priceData) {
-                prices[i] = _convertPythPrice(priceData);
+            try this.getTokenPrice(token) returns (uint256 price, uint256) {
+                prices[i] = price;
             } catch {
-                prices[i] = 0; // Price too stale
+                prices[i] = 0; // Missing or stale feed
             }
         }
-        
+
         return _calculateInventoryValue(prices);
     }
 
@@ -442,23 +428,28 @@ contract ClawMachine is IEntropyConsumer, ReentrancyGuard, Pausable, Ownable {
     // ============ Owner Functions ============
 
     /**
-     * @notice Add a supported xStocks token with its Pyth feed ID
+     * @notice Add a supported xStocks token with its Chainlink price feed
      */
-    function addToken(address token, bytes32 pythFeedId) external onlyOwner {
+    function addToken(address token, address priceFeed) external onlyOwner {
         require(token != address(0), "Invalid token");
-        require(pythFeedId != bytes32(0), "Invalid feed ID");
+        require(priceFeed != address(0), "Invalid feed");
         require(!tokenInfo[token].supported, "Already supported");
 
+        uint8 feedDecimals = IAggregatorV3(priceFeed).decimals();
+        require(feedDecimals <= 18, "Invalid feed");
+
         uint8 decimals = IERC20Metadata(token).decimals();
-        
+
         tokenInfo[token] = TokenInfo({
-            pythFeedId: pythFeedId,
+            priceFeed: priceFeed,
             decimals: decimals,
             supported: true
         });
-        
+
         supportedTokens.push(token);
-        emit TokenAdded(token, pythFeedId);
+        // TokenAdded keeps its historical (address, bytes32) shape; the feed address is
+        // encoded into the bytes32 field so existing decoders do not break.
+        emit TokenAdded(token, bytes32(uint256(uint160(priceFeed))));
     }
 
     /**
@@ -534,12 +525,46 @@ contract ClawMachine is IEntropyConsumer, ReentrancyGuard, Pausable, Ownable {
     }
 
     /**
+     * @notice Refund a pull whose Entropy callback never landed
+     * @dev Owner-only escape hatch. Without it a stuck pull keeps its legendary
+     *      reservation pending forever and blocks later pulls on a small inventory.
+     *      Only allowed once the pull is more than 10 minutes old; it pays the player
+     *      back the pull price and releases the reservation.
+     */
+    function refundStuckPull(uint256 pullId) external onlyOwner nonReentrant {
+        Pull storage pullData = pulls[pullId];
+        require(pullData.player != address(0), "Invalid pull");
+        require(!pullData.resolved, "Already resolved");
+        require(
+            block.timestamp >= uint256(pullData.requestedAt) + STUCK_PULL_TIMEOUT,
+            "Pull not stuck yet"
+        );
+
+        pullData.resolved = true;
+        pendingReservations -= pullData.reservedValue;
+        usdc.safeTransfer(pullData.player, pullPrice);
+
+        emit PullRefunded(pullId, pullData.player, pullPrice);
+    }
+
+    /**
      * @notice Set max price age (larger for after-hours trading)
      */
     function setMaxPriceAge(uint256 newMaxAge) external onlyOwner {
         uint256 oldMaxAge = maxPriceAge;
         maxPriceAge = newMaxAge;
         emit MaxPriceAgeUpdated(oldMaxAge, newMaxAge);
+    }
+
+    /**
+     * @notice Set the gas limit forwarded to the Entropy callback
+     * @dev Monad charges gas on the limit, so keep this just high enough for the callback
+     */
+    function setCallbackGasLimit(uint32 newLimit) external onlyOwner {
+        require(newLimit >= 100_000 && newLimit <= 1_500_000, "Invalid gas limit");
+        uint32 oldLimit = callbackGasLimit;
+        callbackGasLimit = newLimit;
+        emit CallbackGasLimitUpdated(oldLimit, newLimit);
     }
 
     /**
@@ -559,38 +584,44 @@ contract ClawMachine is IEntropyConsumer, ReentrancyGuard, Pausable, Ownable {
     // ============ Internal Functions ============
 
     /**
-     * @notice Convert Pyth price to USDC (6 decimals) per 1e18 token units
+     * @notice Entropy contract address used by IEntropyConsumer to authenticate callbacks
      */
-    function _convertPythPrice(PythStructs.Price memory priceData) internal pure returns (uint256) {
-        require(priceData.price > 0, "Invalid price");
-        
-        // Pyth price has expo (e.g., -8 means divide by 1e8)
-        // We want price in USDC (6 decimals) per 1e18 token units
-        
-        uint256 price = uint256(uint64(priceData.price));
-        int32 expo = priceData.expo;
-        
-        // Target: USDC (6 decimals) per 1e18 tokens
-        // Example: TSLA price is $250.00, expo = -8
-        // priceData.price = 25000000000 (250 * 1e8)
-        // We want: 250000000 (250 * 1e6)
-        
-        if (expo >= 0) {
-            // Price is multiplied, convert to 6 decimals
-            return price * (10 ** uint32(expo)) / 1e12; // Assuming base is 1e18, target is 1e6
-        } else {
-            // Price has negative exponent
-            uint32 expoDenom = uint32(-expo);
-            
-            // Adjust to 6 decimal USDC
-            if (expoDenom > 6) {
-                // e.g., expo = -8, divide by 1e8, then multiply by 1e6
-                return (price * 1e6) / (10 ** expoDenom);
-            } else {
-                // e.g., expo = -4, divide by 1e4, then multiply by 1e6
-                return (price * 1e6) / (10 ** expoDenom);
-            }
-        }
+    function getEntropy() internal view override returns (address) {
+        return address(entropy);
+    }
+
+    /**
+     * @notice Read a Chainlink feed and convert it to USDC per whole xStock unit
+     * @dev The feed prices the wrapped, non-rebasing xStock. One wrapped share is
+     *      `multiplier()` units of the rebasing xStock, so divide by the multiplier.
+     */
+    function _getPrice(address token)
+        internal
+        view
+        returns (uint256 priceUsd6, uint256 updatedAt)
+    {
+        TokenInfo memory info = tokenInfo[token];
+        require(info.supported, "Token not supported");
+        require(info.priceFeed != address(0), "Invalid feed");
+
+        (uint80 roundId, int256 answer, , uint256 feedUpdatedAt, uint80 answeredInRound) =
+            IAggregatorV3(info.priceFeed).latestRoundData();
+        roundId;
+        answeredInRound;
+
+        require(answer > 0, "Invalid price");
+        require(feedUpdatedAt != 0 && feedUpdatedAt <= block.timestamp, "Invalid price");
+        require(block.timestamp - feedUpdatedAt <= maxPriceAge, "Price too stale");
+
+        uint8 feedDecimals = IAggregatorV3(info.priceFeed).decimals();
+        uint256 feedPriceUsd6 = (uint256(answer) * 1e6) / (10 ** feedDecimals);
+
+        uint256 multiplier = IXStock(token).multiplier();
+        require(multiplier > 0, "Invalid multiplier");
+
+        priceUsd6 = (feedPriceUsd6 * 1e18) / multiplier;
+        require(priceUsd6 > 0, "Invalid price");
+        updatedAt = feedUpdatedAt;
     }
 
     /**
@@ -632,34 +663,82 @@ contract ClawMachine is IEntropyConsumer, ReentrancyGuard, Pausable, Ownable {
         stocks = new address[](numTokens);
         amounts = new uint256[](numTokens);
 
-        // Use random number to distribute payout across tokens
-        uint256 remainingUSDC = totalPayoutUSDC;
-        
+        uint256[] memory prices = new uint256[](numTokens);
+        uint256[] memory capacities = new uint256[](numTokens);
+        uint256[] memory allocatedUSDC = new uint256[](numTokens);
+
+        // A token can only pay out what the machine currently holds, valued at the
+        // pull-time snapshot price. Without this cap a random split could assign the
+        // payout to an empty token and turn a real payout into an IOU.
         for (uint256 i = 0; i < numTokens; i++) {
             address token = supportedTokens[i];
             TokenInfo memory info = tokenInfo[token];
-            uint256 price = pullData.priceSnapshot[token]; // Use snapshot price
-            
             stocks[i] = token;
-            
+            prices[i] = pullData.priceSnapshot[token];
+            if (prices[i] == 0) continue;
+
+            uint256 balance = IERC20(token).balanceOf(address(this));
+            if (balance == 0) continue;
+
+            uint256 balanceIn1e18 = _toStandardDecimals(balance, info.decimals);
+            capacities[i] = (balanceIn1e18 * prices[i]) / PRICE_PRECISION;
+        }
+
+        // Keep the random split, but never allocate more than a token can cover.
+        uint256 remainingUSDC = totalPayoutUSDC;
+        for (uint256 i = 0; i < numTokens && remainingUSDC > 0; i++) {
+            if (capacities[i] == 0) continue;
+
+            uint256 allocationUSDC;
             if (i == numTokens - 1) {
-                // Last token gets remaining value
-                if (remainingUSDC > 0 && price > 0) {
-                    uint256 amountIn1e18 = (remainingUSDC * PRICE_PRECISION) / price;
-                    amounts[i] = _fromStandardDecimals(amountIn1e18, info.decimals);
-                }
+                allocationUSDC = remainingUSDC;
             } else {
-                // Random allocation
                 uint256 seed = uint256(keccak256(abi.encodePacked(randomNumber, i)));
-                uint256 allocationBps = (seed % (BPS_DENOMINATOR + 1));
-                uint256 allocationUSDC = (remainingUSDC * allocationBps) / BPS_DENOMINATOR;
-                
-                if (allocationUSDC > 0 && price > 0) {
-                    uint256 amountIn1e18 = (allocationUSDC * PRICE_PRECISION) / price;
-                    amounts[i] = _fromStandardDecimals(amountIn1e18, info.decimals);
-                    remainingUSDC -= allocationUSDC;
-                }
+                uint256 allocationBps = seed % (BPS_DENOMINATOR + 1);
+                allocationUSDC = (remainingUSDC * allocationBps) / BPS_DENOMINATOR;
             }
+
+            if (allocationUSDC > capacities[i]) allocationUSDC = capacities[i];
+            if (allocationUSDC > remainingUSDC) allocationUSDC = remainingUSDC;
+
+            allocatedUSDC[i] = allocationUSDC;
+            remainingUSDC -= allocationUSDC;
+        }
+
+        // Give anything the caps left behind to tokens that still have spare balance,
+        // in order. This is what makes an empty token harmless instead of an IOU.
+        for (uint256 i = 0; i < numTokens && remainingUSDC > 0; i++) {
+            if (allocatedUSDC[i] >= capacities[i]) continue;
+
+            uint256 spare = capacities[i] - allocatedUSDC[i];
+            uint256 extra = remainingUSDC < spare ? remainingUSDC : spare;
+            allocatedUSDC[i] += extra;
+            remainingUSDC -= extra;
+        }
+
+        // Only when the whole inventory cannot cover the payout, assign the uncovered
+        // part to a token with no balance so the existing transfer fallback records it
+        // as an owed balance instead of silently dropping it.
+        if (remainingUSDC > 0) {
+            uint256 shortfallIndex = type(uint256).max;
+            for (uint256 i = 0; i < numTokens; i++) {
+                if (prices[i] == 0) continue;
+                if (capacities[i] == 0) {
+                    shortfallIndex = i;
+                    break;
+                }
+                shortfallIndex = i;
+            }
+            if (shortfallIndex != type(uint256).max) {
+                allocatedUSDC[shortfallIndex] += remainingUSDC;
+            }
+        }
+
+        for (uint256 i = 0; i < numTokens; i++) {
+            if (allocatedUSDC[i] == 0 || prices[i] == 0) continue;
+
+            uint256 amountIn1e18 = (allocatedUSDC[i] * PRICE_PRECISION) / prices[i];
+            amounts[i] = _fromStandardDecimals(amountIn1e18, tokenInfo[stocks[i]].decimals);
         }
     }
 
