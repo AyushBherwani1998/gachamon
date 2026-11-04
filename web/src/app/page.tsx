@@ -13,7 +13,7 @@ import { ResultCard, TxLink } from "@/components/result-card";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { Card, CardContent } from "@/components/ui/8bit/card";
-import { deployment, IS_DEMO_MODE } from "@/config/deployments";
+import { deployment, isDeployed, IS_DEMO_MODE } from "@/config/deployments";
 import { useBalances } from "@/hooks/use-balances";
 import { useMachine } from "@/hooks/use-machine";
 import { usePull } from "@/hooks/use-pull";
@@ -70,6 +70,7 @@ export default function Home() {
     machine.fee !== undefined &&
     balances.mon !== undefined &&
     balances.mon < machine.fee;
+  const usdcReady = demo || isDeployed(deployment.usdc);
   const machineReady = demo || (machine.isDeployed && machine.canPull);
 
   const label = useMemo(() => {
@@ -85,6 +86,7 @@ export default function Home() {
     if (!isConnected) return "Connect wallet";
     if (wrongNetwork) return `Switch to ${deployment.name}`;
     if (!machine.isDeployed) return "Machine not deployed";
+    if (!usdcReady) return "USDC not configured";
     if (machine.isLoading) return "Checking machine…";
     if (machine.paused) return "Machine paused";
     if (!machine.canPull) return "Machine refilling";
@@ -100,6 +102,7 @@ export default function Home() {
     isConnected,
     wrongNetwork,
     machine.isDeployed,
+    usdcReady,
     machine.isLoading,
     machine.paused,
     machine.canPull,
@@ -114,7 +117,7 @@ export default function Home() {
     busy ||
     connecting ||
     (!demo && isConnected && !wrongNetwork && !machineReady) ||
-    (!demo && isConnected && !wrongNetwork && machineReady && (insufficientUsdc || insufficientMon));
+    (!demo && isConnected && !wrongNetwork && machineReady && (!usdcReady || insufficientUsdc || insufficientMon));
 
   const handlePrimary = () => {
     if (busy) return;
@@ -128,7 +131,7 @@ export default function Home() {
       switchChain({ chainId: deployment.chainId });
       return;
     }
-    if (!demo && (!machine.isDeployed || !machineReady || insufficientUsdc || insufficientMon)) return;
+    if (!demo && (!machine.isDeployed || !usdcReady || !machineReady || insufficientUsdc || insufficientMon)) return;
     if (pull.phase === "revealed" || pull.phase === "error") {
       pull.reset();
     }

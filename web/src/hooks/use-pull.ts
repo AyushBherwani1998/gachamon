@@ -115,6 +115,11 @@ export function usePull(): PullState {
       setPhase("error");
       return;
     }
+    if (!isDeployed(deployment.usdc)) {
+      setError("USDC is not configured for this network.");
+      setPhase("error");
+      return;
+    }
 
     const currentRun = ++runId.current;
     setError(null);
