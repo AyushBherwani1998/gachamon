@@ -10,7 +10,7 @@ Built at Monad Blitz, Devcon Mumbai 2026.
 
 | | |
 |---|---|
-| **App** | https://claw-web-production-312b.up.railway.app |
+| **App** | https://gacha-mon.xyz (backup: https://claw-web-production-312b.up.railway.app) |
 | **Contract** | `ClawMachine` — [`0xbC4e651C6326Ecb440b8bF54033f2ed4323C9c72`](https://monadscan.com/address/0xbC4e651C6326Ecb440b8bF54033f2ed4323C9c72) on Monad mainnet (chain 143) |
 | **Source** | Verified — exact match on [Sourcify (BlockVision)](https://sourcify-api-monad.blockvision.org/v2/contract/143/0xbC4e651C6326Ecb440b8bF54033f2ed4323C9c72) |
 | **Deploy tx** | [`0x2788b3f4444ea078582c127889bbeb89ab7a0024f71e5b53bcce5a5b4d89fdfc`](https://monadscan.com/tx/0x2788b3f4444ea078582c127889bbeb89ab7a0024f71e5b53bcce5a5b4d89fdfc), block 119302850 |
@@ -93,7 +93,6 @@ Requirements: [Foundry](https://book.getfoundry.sh/getting-started/installation)
 ```
 contracts/   ClawMachine, mocks, deploy scripts, tests
 web/         Next.js player app
-backend/     optional indexer
 ```
 
 ### Contracts
@@ -151,8 +150,6 @@ bun run dev
 ```
 
 Open http://localhost:3000.
-
-`backend/` is optional: it is the indexer for indexed pull history.
 
 ## Team
 
