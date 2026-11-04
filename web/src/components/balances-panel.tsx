@@ -5,6 +5,7 @@ import { useAccount } from "wagmi";
 import { FaucetButton } from "@/components/faucet-button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/8bit/card";
 import { deployment, IS_DEMO_MODE } from "@/config/deployments";
+import { TESTNET_FAUCET_URL } from "@/config/chains";
 import { useBalances } from "@/hooks/use-balances";
 import { formatMon, formatToken, formatUsd6 } from "@/lib/format";
 
@@ -19,8 +20,19 @@ export function BalancesPanel() {
       </CardHeader>
       <CardContent font="normal">
         {deployment.key === "testnet" && !IS_DEMO_MODE ? (
-          <div className="mb-3 flex justify-end">
-            <FaucetButton />
+          <div className="mb-3 flex flex-col gap-1 border-y-2 border-border/60 py-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="retro text-[8px] text-muted-foreground">TESTNET FUNDS</span>
+              <FaucetButton />
+            </div>
+            <a
+              href={TESTNET_FAUCET_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex min-h-11 items-center justify-end text-[10px] underline decoration-dotted underline-offset-4 hover:text-foreground"
+            >
+              Need testnet MON? Open the Monad faucet ↗
+            </a>
           </div>
         ) : null}
         {!isConnected && !IS_DEMO_MODE ? (
