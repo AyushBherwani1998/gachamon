@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import "@fontsource/press-start-2p/400.css";
 
 import { Providers } from "./providers";
 import "./globals.css";

@@ -1,4 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/8bit/card";
+import { deployment, IS_DEMO_MODE } from "@/config/deployments";
 import { formatUsd6 } from "@/lib/format";
 import type { MachineSnapshot } from "@/lib/types";
 
@@ -69,6 +70,10 @@ export function OddsPanel({ machine, demo = false }: OddsPanelProps) {
         {demo ? (
           <p className="border-t-2 border-border/60 pt-3 text-[10px] text-primary">
             DEMO MODE · simulated pulls, no real funds
+          </p>
+        ) : deployment.key === "testnet" && !IS_DEMO_MODE ? (
+          <p className="border-t-2 border-border/60 pt-3 text-[10px] text-[#ffd45f]">
+            TESTNET · mock USDC and mock stocks, no real value
           </p>
         ) : null}
       </CardContent>
