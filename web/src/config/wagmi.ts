@@ -2,7 +2,7 @@ import { createConfig as createPrivyConfig } from "@privy-io/wagmi";
 import { createConfig, http } from "wagmi";
 import { injected, metaMask } from "wagmi/connectors";
 
-import { DEFAULT_NETWORK } from "./deployments";
+import { DEFAULT_NETWORK, deployments } from "./deployments";
 import { monadMainnet, monadTestnetChain } from "./chains";
 
 /**
@@ -18,7 +18,7 @@ export const defaultChain = supportedChains[0];
 
 const transports = {
   [monadTestnetChain.id]: http("https://testnet-rpc.monad.xyz"),
-  [monadMainnet.id]: http("https://rpc.monad.xyz"),
+  [monadMainnet.id]: http(deployments.mainnet.rpcUrl),
 } as const;
 
 /**
