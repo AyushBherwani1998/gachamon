@@ -959,6 +959,17 @@ contract ClawMachineTest is Test {
         new ClawMachine(address(usdc), address(entropy), tooMany, TREASURY, address(this));
     }
 
+    function testConstructorRejectsNon18DecimalStock() public {
+        SixDecimalStock six = new SixDecimalStock();
+
+        address[] memory tokens = new address[](2);
+        tokens[0] = address(tsla);
+        tokens[1] = address(six);
+
+        vm.expectRevert("invalid decimals");
+        new ClawMachine(address(usdc), address(entropy), tokens, TREASURY, address(this));
+    }
+
     function testConstructorRejectsUsdcAsStock() public {
         address[] memory withUsdc = new address[](2);
         withUsdc[0] = address(tsla);
@@ -995,5 +1006,13 @@ contract RevertingBalanceStock is MockStock {
 
     function balanceOf(address) public view override returns (uint256) {
         revert("balanceOf reverted");
+    }
+}
+
+contract SixDecimalStock is MockStock {
+    constructor() MockStock("Six Decimal Stock", "SIX") {}
+
+    function decimals() public pure override returns (uint8) {
+        return 6;
     }
 }

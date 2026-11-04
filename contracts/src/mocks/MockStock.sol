@@ -13,7 +13,7 @@ contract MockStock is ERC20, Ownable {
         Ownable(msg.sender)
     {}
 
-    function decimals() public pure override returns (uint8) {
+    function decimals() public pure virtual override returns (uint8) {
         return 18;
     }
 
