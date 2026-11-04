@@ -4,8 +4,8 @@ export interface StockMeta {
   address: Address;
   symbol: string;
   decimals: number;
-  /** Pyth feed id (bytes32) from `tokenInfo(token)`. */
-  feedId: Hex;
+  /** Chainlink price feed address from `tokenInfo(token)`. */
+  priceFeed: Address;
 }
 
 export interface TokenAmount {
@@ -28,7 +28,7 @@ export interface MachineSnapshot {
   isDeployed: boolean;
   isLoading: boolean;
   paused: boolean;
-  /** Computed from fresh off-chain prices, never from canPull()/getInventoryValue(). */
+  /** `canPull()` and not paused. */
   pullable: boolean;
   pullPrice?: bigint;
   /** pullPrice * commonPayoutBps / 10000, in USDC 6 decimals. */
@@ -42,12 +42,12 @@ export interface MachineSnapshot {
   totalPulls?: bigint;
   inventoryValueUsd6?: bigint;
   reservedValueUsd6?: bigint;
-  /** Entropy fee in MON from `getEntropyFee()`. The Pyth update fee is added per pull. */
+  /** Entropy fee in MON from `getFee()`. This is the whole msg.value. */
   entropyFee?: bigint;
-  /** Latest Pyth publish time across the fetched feeds, unix seconds. */
+  /** Latest Chainlink update time across the supported tokens, unix seconds. */
   pricesUpdatedAt?: bigint;
   stocks: StockMeta[];
-  /** Fresh USD price per stock, 6 decimals per 1e18 token units. */
+  /** Live USD price per whole token, 6 decimals. */
   prices: bigint[];
   error: string | null;
   refetch: () => void;
@@ -93,22 +93,6 @@ export interface BalanceSnapshot {
   refetch: () => void;
 }
 
-export interface PriceQuote {
-  token: Address;
-  symbol: string;
-  feedId: Hex;
-  /** Raw Pyth price integer. */
-  price: string;
-  expo: number;
-  /** Normalized USD price, 6 decimals per 1e18 token units. */
-  priceUsd6: string;
-  publishTime: number;
-}
-
-export interface PriceUpdateResponse {
-  updateData: Hex[];
-  prices: PriceQuote[];
-}
 
 export interface FeedStock {
   token: Address;

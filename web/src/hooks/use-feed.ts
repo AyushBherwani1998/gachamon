@@ -8,7 +8,7 @@ import type { FeedItem } from "@/components/panels";
 import { deployment, isDeployed, IS_DEMO_MODE } from "@/config/deployments";
 import { dedupePulls, fetchBackendPulls, fetchFeed, pullResultToRecent } from "@/lib/feed";
 import { getMockFeed, getMockState, subscribeMock } from "@/lib/mock";
-import { tokenAmountTo18 } from "@/lib/prices";
+import { tokenAmountTo18 } from "@/lib/tokens";
 import { toFeedItems } from "@/lib/pull-view";
 import type { FeedPull, MachineSnapshot, PullResult, RecentPull } from "@/lib/types";
 

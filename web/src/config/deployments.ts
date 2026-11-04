@@ -44,7 +44,8 @@ export const deployments: Record<NetworkKey, Deployment> = {
     name: "Monad",
     clawMachine: envAddress(process.env.NEXT_PUBLIC_CLAW_MACHINE_MAINNET),
     usdc: USDC_MAINNET,
-    rpcUrl: "https://rpc.monad.xyz",
+    // Optional override, e.g. a local `anvil --fork-url https://rpc.monad.xyz` for rehearsals.
+    rpcUrl: process.env.NEXT_PUBLIC_MONAD_RPC_URL || "https://rpc.monad.xyz",
     explorerUrl: EXPLORERS.mainnet,
   },
   testnet: {

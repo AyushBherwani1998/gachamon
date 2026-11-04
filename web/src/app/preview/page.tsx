@@ -21,7 +21,10 @@ const RESULTS = {
   legendary: {
     pullId: "2482",
     legendary: true,
-    payouts: [{ symbol: "TSLAx", amount: "0.0237", usd: "10.00" }],
+    payouts: [
+      { symbol: "TSLAx", amount: "0.0142", usd: "5.98" },
+      { symbol: "NVDAx", amount: "0.0291", usd: "4.02" },
+    ],
     valueUsd: "10.00",
   },
   "multi-stock": {
