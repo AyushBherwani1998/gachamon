@@ -396,7 +396,7 @@
     0 0 22px var(--frame-glow);
 }
 
-.gm-staticGold {
+.gm-resultPanel.gm-staticGold {
   box-shadow:
     0 0 0 2px var(--night),
     0 0 0 4px var(--gold-deep),
@@ -808,7 +808,7 @@
     transform: none;
   }
 
-  .gm-legendary {
+  .gm-resultPanel.gm-legendary {
     box-shadow:
       0 0 0 2px var(--night),
       0 0 0 4px var(--gold-deep),
@@ -836,7 +836,7 @@
   transform: none;
 }
 
-[data-reduced-motion="true"] .gm-legendary {
+[data-reduced-motion="true"] .gm-resultPanel.gm-legendary {
   box-shadow:
     0 0 0 2px var(--night),
     0 0 0 4px var(--gold-deep),
