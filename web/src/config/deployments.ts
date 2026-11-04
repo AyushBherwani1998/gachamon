@@ -10,6 +10,8 @@ export interface Deployment {
   chain: typeof monadMainnet | typeof monadTestnetChain;
   name: string;
   clawMachine: Address;
+  /** Block the ClawMachine was deployed at, so feeds can backfill every pull. */
+  deployBlock?: bigint;
   usdc: Address;
   rpcUrl: string;
   explorerUrl: string;
@@ -43,6 +45,7 @@ export const deployments: Record<NetworkKey, Deployment> = {
     chain: monadMainnet,
     name: "Monad",
     clawMachine: envAddress(process.env.NEXT_PUBLIC_CLAW_MACHINE_MAINNET),
+    deployBlock: 119_302_850n,
     usdc: USDC_MAINNET,
     // Optional override, e.g. a local `anvil --fork-url https://rpc.monad.xyz` for rehearsals.
     rpcUrl: process.env.NEXT_PUBLIC_MONAD_RPC_URL || "https://rpc.monad.xyz",

@@ -10,10 +10,105 @@ import type { FeedPull, FeedResponse, FeedStock } from "@/lib/types";
 
 const LOOKBACK_BLOCKS = 1_500n;
 const CHUNK_BLOCKS = 100n;
+const MAX_CHUNKS_IN_FLIGHT = 8;
+const MAX_INDEXED_LOGS = 50;
 const MAX_PULLS = 20;
 const CACHE_MS = 5_000;
 
+type PullLog = {
+  args: {
+    pullId?: bigint;
+    player?: Address;
+    legendary?: boolean;
+    stocks?: readonly Address[];
+    amounts?: readonly bigint[];
+  };
+  blockNumber: bigint;
+  logIndex: number;
+  transactionHash: Hex;
+};
+
+interface PullIndex {
+  logs: PullLog[];
+  lastScanned: bigint | null;
+  scan: Promise<void> | null;
+}
+
 const cache = new Map<number, { at: number; payload: FeedResponse }>();
+const pullIndexes = new Map<NetworkKey, PullIndex>();
+
+function pullIndex(network: NetworkKey): PullIndex {
+  let index = pullIndexes.get(network);
+  if (!index) {
+    index = { logs: [], lastScanned: null, scan: null };
+    pullIndexes.set(network, index);
+  }
+  return index;
+}
+
+function newestFirst(a: PullLog, b: PullLog) {
+  if (a.blockNumber !== b.blockNumber) return a.blockNumber > b.blockNumber ? -1 : 1;
+  return b.logIndex - a.logIndex;
+}
+
+/**
+ * Index every `PullResolved` since the machine was deployed, then only top up
+ * from the last scanned block. The public RPC caps `eth_getLogs` at 100 blocks,
+ * so the range is chunked with a bounded number of requests in flight.
+ */
+async function scanPulls(network: NetworkKey, index: PullIndex): Promise<void> {
+  const deployment = deployments[network];
+  const client = serverClient(network);
+  const latest = await client.getBlockNumber();
+  const fromBlock =
+    index.lastScanned !== null
+      ? index.lastScanned + 1n
+      : deployment.deployBlock ?? (latest > LOOKBACK_BLOCKS ? latest - LOOKBACK_BLOCKS : 0n);
+
+  if (fromBlock > latest) return;
+
+  const ranges: Array<{ from: bigint; to: bigint }> = [];
+  for (let from = fromBlock; from <= latest; from += CHUNK_BLOCKS) {
+    const to = from + CHUNK_BLOCKS - 1n > latest ? latest : from + CHUNK_BLOCKS - 1n;
+    ranges.push({ from, to });
+  }
+
+  const found: PullLog[] = [];
+  let next = 0;
+  const workers = Array.from(
+    { length: Math.min(MAX_CHUNKS_IN_FLIGHT, ranges.length) },
+    async () => {
+      while (next < ranges.length) {
+        const range = ranges[next];
+        next += 1;
+        const chunk = await client.getContractEvents({
+          address: deployment.clawMachine,
+          abi: clawMachineAbi,
+          eventName: "PullResolved",
+          fromBlock: range.from,
+          toBlock: range.to,
+        });
+        found.push(...(chunk as unknown as PullLog[]));
+      }
+    }
+  );
+  await Promise.all(workers);
+
+  index.logs = [...index.logs, ...found].sort(newestFirst).slice(0, MAX_INDEXED_LOGS);
+  index.lastScanned = latest;
+}
+
+/** Concurrent requests share one in-flight scan instead of duplicating work. */
+async function indexedPulls(network: NetworkKey): Promise<PullLog[]> {
+  const index = pullIndex(network);
+  if (!index.scan) {
+    index.scan = scanPulls(network, index).finally(() => {
+      index.scan = null;
+    });
+  }
+  await index.scan;
+  return index.logs;
+}
 
 function jsonError(status: number, error: string) {
   return NextResponse.json(
@@ -50,42 +145,8 @@ async function tokenMeta(
 }
 
 async function readRecentPulls(network: NetworkKey): Promise<FeedResponse> {
-  const deployment = deployments[network];
   const client = serverClient(network);
-  const latest = await client.getBlockNumber();
-  const fromBlock = latest > LOOKBACK_BLOCKS ? latest - LOOKBACK_BLOCKS : 0n;
-
-  const logs: Array<{
-    args: {
-      pullId?: bigint;
-      player?: Address;
-      legendary?: boolean;
-      stocks?: readonly Address[];
-      amounts?: readonly bigint[];
-    };
-    blockNumber: bigint;
-    logIndex: number;
-    transactionHash: Hex;
-  }> = [];
-
-  for (let scan = fromBlock; scan <= latest; scan += CHUNK_BLOCKS) {
-    const toBlock = scan + CHUNK_BLOCKS - 1n > latest ? latest : scan + CHUNK_BLOCKS - 1n;
-    const chunk = await client.getContractEvents({
-      address: deployment.clawMachine,
-      abi: clawMachineAbi,
-      eventName: "PullResolved",
-      fromBlock: scan,
-      toBlock,
-    });
-    logs.push(...(chunk as unknown as typeof logs));
-  }
-
-  // Newest first, then trim before doing any metadata reads.
-  logs.sort((a, b) => {
-    if (a.blockNumber !== b.blockNumber) return a.blockNumber > b.blockNumber ? -1 : 1;
-    return b.logIndex - a.logIndex;
-  });
-  const recent = logs.slice(0, MAX_PULLS);
+  const recent = (await indexedPulls(network)).slice(0, MAX_PULLS);
 
   const blockNumbers = [...new Set(recent.map((log) => log.blockNumber.toString()))];
   const blocks = await Promise.all(
