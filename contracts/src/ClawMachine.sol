@@ -62,11 +62,14 @@ contract ClawMachine is IEntropyConsumer, ReentrancyGuard, Pausable, Ownable {
 
     event CallbackGasLimitUpdated(uint32 oldLimit, uint32 newLimit);
 
+    event PullRefunded(uint256 indexed pullId, address indexed player, uint256 amount);
+
     // ============ Structs ============
 
     struct Pull {
         address player;
         uint64 entropySequence;
+        uint64 requestedAt;
         uint256 reservedValue;
         bool resolved;
         // Snapshot of prices at pull request time (for callback)
@@ -117,6 +120,7 @@ contract ClawMachine is IEntropyConsumer, ReentrancyGuard, Pausable, Ownable {
 
     uint256 private constant BPS_DENOMINATOR = 10000;
     uint256 private constant PRICE_PRECISION = 1e18; // Token amounts in 1e18 units
+    uint256 private constant STUCK_PULL_TIMEOUT = 10 minutes;
 
     // ============ Constructor ============
 
@@ -204,6 +208,7 @@ contract ClawMachine is IEntropyConsumer, ReentrancyGuard, Pausable, Ownable {
         Pull storage pullData = pulls[pullId];
         pullData.player = msg.sender;
         pullData.entropySequence = sequenceNumber;
+        pullData.requestedAt = uint64(block.timestamp);
         pullData.reservedValue = legendaryPayoutUSDC;
         pullData.resolved = false;
         
@@ -536,6 +541,29 @@ contract ClawMachine is IEntropyConsumer, ReentrancyGuard, Pausable, Ownable {
         }
 
         emit InventoryRefilled(tokens, amounts);
+    }
+
+    /**
+     * @notice Refund a pull whose Entropy callback never landed
+     * @dev Owner-only escape hatch. Without it a stuck pull keeps its legendary
+     *      reservation pending forever and blocks later pulls on a small inventory.
+     *      Only allowed once the pull is more than 10 minutes old; it pays the player
+     *      back the pull price and releases the reservation.
+     */
+    function refundStuckPull(uint256 pullId) external onlyOwner nonReentrant {
+        Pull storage pullData = pulls[pullId];
+        require(pullData.player != address(0), "Invalid pull");
+        require(!pullData.resolved, "Already resolved");
+        require(
+            block.timestamp >= uint256(pullData.requestedAt) + STUCK_PULL_TIMEOUT,
+            "Pull not stuck yet"
+        );
+
+        pullData.resolved = true;
+        pendingReservations -= pullData.reservedValue;
+        usdc.safeTransfer(pullData.player, pullPrice);
+
+        emit PullRefunded(pullId, pullData.player, pullPrice);
     }
 
     /**

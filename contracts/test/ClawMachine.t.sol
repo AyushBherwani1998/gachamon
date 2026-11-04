@@ -47,6 +47,8 @@ contract ClawMachineTest is Test {
         uint256[] amounts
     );
 
+    event PullRefunded(uint256 indexed pullId, address indexed player, uint256 amount);
+
     function setUp() public {
         // Deploy mocks
         usdc = new MockERC20("USDC", "USDC", 6);
@@ -424,6 +426,103 @@ contract ClawMachineTest is Test {
         claw.pull{value: TOTAL_FEE}(bytes32(uint256(12345)), priceUpdate);
 
         assertEq(entropy.lastGasLimit(), 650_000);
+    }
+
+    function test_RefundStuckPull() public {
+        vm.prank(player);
+        usdc.approve(address(claw), PULL_PRICE);
+
+        bytes[] memory priceUpdate = _getEmptyPriceUpdate();
+        vm.prank(player);
+        uint256 pullId = claw.pull{value: TOTAL_FEE}(bytes32(uint256(12345)), priceUpdate);
+
+        uint256 playerBalanceDuringPull = usdc.balanceOf(player);
+        assertEq(claw.getPendingReservations(), 10_000000);
+
+        vm.warp(block.timestamp + 10 minutes);
+
+        vm.expectEmit(true, true, false, true, address(claw));
+        emit PullRefunded(pullId, player, PULL_PRICE);
+
+        vm.prank(owner);
+        claw.refundStuckPull(pullId);
+
+        assertEq(usdc.balanceOf(player), playerBalanceDuringPull + PULL_PRICE, "refund paid");
+        assertEq(claw.getPendingReservations(), 0, "reservation released");
+
+        (address p, , , bool resolved) = claw.getPullBasicData(pullId);
+        assertEq(p, player);
+        assertTrue(resolved, "marked resolved");
+    }
+
+    function test_RefundStuckPullBeforeTimeoutReverts() public {
+        vm.prank(player);
+        usdc.approve(address(claw), PULL_PRICE);
+
+        bytes[] memory priceUpdate = _getEmptyPriceUpdate();
+        vm.prank(player);
+        uint256 pullId = claw.pull{value: TOTAL_FEE}(bytes32(uint256(12345)), priceUpdate);
+
+        vm.warp(block.timestamp + 10 minutes - 1);
+
+        vm.prank(owner);
+        vm.expectRevert("Pull not stuck yet");
+        claw.refundStuckPull(pullId);
+    }
+
+    function test_RefundStuckPullOnlyOwner() public {
+        vm.prank(player);
+        usdc.approve(address(claw), PULL_PRICE);
+
+        bytes[] memory priceUpdate = _getEmptyPriceUpdate();
+        vm.prank(player);
+        uint256 pullId = claw.pull{value: TOTAL_FEE}(bytes32(uint256(12345)), priceUpdate);
+
+        vm.warp(block.timestamp + 10 minutes);
+
+        vm.prank(player);
+        vm.expectRevert();
+        claw.refundStuckPull(pullId);
+    }
+
+    function test_RefundStuckPullAlreadyResolvedReverts() public {
+        vm.prank(player);
+        usdc.approve(address(claw), PULL_PRICE);
+
+        bytes[] memory priceUpdate = _getEmptyPriceUpdate();
+        vm.prank(player);
+        uint256 pullId = claw.pull{value: TOTAL_FEE}(bytes32(uint256(12345)), priceUpdate);
+
+        entropy.fulfillWithRoll(1, 500);
+        vm.warp(block.timestamp + 10 minutes);
+
+        vm.prank(owner);
+        vm.expectRevert("Already resolved");
+        claw.refundStuckPull(pullId);
+    }
+
+    function test_RefundUnknownPullReverts() public {
+        vm.prank(owner);
+        vm.expectRevert("Invalid pull");
+        claw.refundStuckPull(42);
+    }
+
+    function test_RefundedPullCallbackReverts() public {
+        vm.prank(player);
+        usdc.approve(address(claw), PULL_PRICE);
+
+        bytes[] memory priceUpdate = _getEmptyPriceUpdate();
+        vm.prank(player);
+        uint256 pullId = claw.pull{value: TOTAL_FEE}(bytes32(uint256(12345)), priceUpdate);
+
+        vm.warp(block.timestamp + 10 minutes);
+
+        vm.prank(owner);
+        claw.refundStuckPull(pullId);
+
+        // A callback that lands after the refund must not pay out twice.
+        vm.expectRevert("Already resolved");
+        entropy.fulfillWithRoll(1, 500);
     }
 
     function test_PriceSnapshotStored() public {

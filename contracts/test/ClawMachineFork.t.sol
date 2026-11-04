@@ -63,13 +63,9 @@ contract ClawMachineForkTest is Test {
             owner
         );
 
-        // Setup tokens
-        vm.startPrank(owner);
+        // The live Hermes key is only entitled to TSLA, so the machine starts TSLAx-only.
+        vm.prank(owner);
         claw.addToken(TSLAx, TSLA_FEED_ID);
-        claw.addToken(AAPLx, AAPL_FEED_ID);
-        claw.addToken(NVDAx, NVDA_FEED_ID);
-        claw.addToken(SPYx, SPY_FEED_ID);
-        vm.stopPrank();
     }
 
     function test_Fork_ContractDeployment() public view {
@@ -141,14 +137,6 @@ contract ClawMachineForkTest is Test {
         }
 
         _warpToPublishTime();
-
-        // The machine only supports TSLAx, matching mainnet entitlement.
-        vm.prank(owner);
-        claw.removeToken(AAPLx);
-        vm.prank(owner);
-        claw.removeToken(NVDAx);
-        vm.prank(owner);
-        claw.removeToken(SPYx);
 
         // The actor holds ~9 USD of TSLAx, below the 10 USD reserved by the default 10x
         // legendary. Use 5x for the fork test so the real inventory covers the reservation.
@@ -223,13 +211,6 @@ contract ClawMachineForkTest is Test {
         }
 
         _warpToPublishTime();
-
-        vm.prank(owner);
-        claw.removeToken(AAPLx);
-        vm.prank(owner);
-        claw.removeToken(NVDAx);
-        vm.prank(owner);
-        claw.removeToken(SPYx);
 
         // 5x keeps the legendary payout inside the actor's inventory.
         vm.prank(owner);
