@@ -59,9 +59,17 @@ The xStocks are transferred automatically to the player's address (the caller of
 
 ### Frontend
 - Card pull UI with shake/tear animations
-- Wallet integration (MetaMask, etc.)
+- Wallet connection via Privy (see below)
 - Displays xStocks balances and pull history
 - Handles USDC + MON approvals
+
+### Wallet Connection (Privy)
+- **SDK**: `@privy-io/react-auth`, with `PrivyProvider` wrapping the app
+- **Login**: Email or social login creates an embedded wallet; external wallets (MetaMask, etc.) can still connect
+- **Chain config**: Set Monad mainnet (chain 143) as `defaultChain` and in `supportedChains`, using `https://rpc.monad.xyz`
+- **Signing**: Get the active wallet from `useWallets()` and send USDC `approve` + `pull()` through a Viem wallet client
+- **Funding**: Embedded wallets start empty, so the UI shows the wallet address and asks players to fund it with USDC + MON before their first pull
+- **Config**: Privy App ID in `NEXT_PUBLIC_PRIVY_APP_ID`; add the demo domain to the app's allowed origins in the Privy dashboard
 
 ### xStocks API
 - External tokenized stock platform
@@ -115,6 +123,7 @@ sequenceDiagram
     end
 
     Note over Player,ClawMachine: Pull flow
+    Player->>Frontend: Log in / connect wallet (Privy)
     Player->>Frontend: Tap Pull button
     Frontend->>ClawMachine: getFee() + canPull()
     ClawMachine-->>Frontend: Fee amount + inventory OK
@@ -262,6 +271,8 @@ interface IClawMachine {
 
 ### Pre-Demo Checklist
 - [ ] Deploy contracts to Monad mainnet
+- [ ] Create Privy app, set App ID, and allow the demo domain
+- [ ] Test Privy login and a pull from a funded embedded wallet and from MetaMask on chain 143
 - [ ] Transfer initial 20 USDC worth of xStocks to contract
 - [ ] Deploy price keeper and verify it updates every minute
 - [ ] Test one common pull end-to-end
