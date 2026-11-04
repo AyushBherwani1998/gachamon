@@ -902,11 +902,13 @@ contract ClawMachineTest is Test {
         uint256 pullId = _pull(PLAYER, machine.getFee());
         uint64 sequence = machine.getPull(pullId).sequenceNumber;
 
+        _coolTouchedAccounts();
+
         uint256 gasBefore = gasleft();
         entropy.fulfill(sequence, COMMON_RANDOM);
         uint256 gasUsed = gasBefore - gasleft();
 
-        emit log_named_uint("callback gas (1 stock)", gasUsed);
+        emit log_named_uint("callback gas (1 stock, cold)", gasUsed);
         assertLt(gasUsed, machine.callbackGasLimit(), "callback under gas limit");
         assertLt(gasUsed, 400_000, "well under limit");
     }
@@ -920,6 +922,8 @@ contract ClawMachineTest is Test {
         uint256 pullId = _pull(PLAYER, machine.getFee());
         uint64 sequence = machine.getPull(pullId).sequenceNumber;
 
+        _coolTouchedAccounts();
+
         uint256 gasBefore = gasleft();
         entropy.fulfill(sequence, LEGENDARY_RANDOM);
         uint256 gasUsed = gasBefore - gasleft();
@@ -927,9 +931,9 @@ contract ClawMachineTest is Test {
         (address[] memory payoutStocks,) = machine.getPullPayout(pullId);
         assertEq(payoutStocks.length, 4, "touched all four stocks");
 
-        emit log_named_uint("callback gas (4 stocks)", gasUsed);
+        emit log_named_uint("callback gas (4 stocks, cold)", gasUsed);
         assertLt(gasUsed, machine.callbackGasLimit(), "callback under gas limit");
-        assertLt(gasUsed, 600_000, "under limit with margin");
+        assertLt(gasUsed, 900_000, "under Monad cold-access budget");
     }
 
     // ---------------------------------------------------------------------
@@ -967,6 +971,16 @@ contract ClawMachineTest is Test {
     // ---------------------------------------------------------------------
     // Internal helper
     // ---------------------------------------------------------------------
+
+    function _coolTouchedAccounts() internal {
+        vm.cool(address(machine));
+        vm.cool(address(entropy));
+        vm.cool(PLAYER);
+        vm.cool(address(usdc));
+        for (uint256 i = 0; i < stockTokens.length; ++i) {
+            vm.cool(stockTokens[i]);
+        }
+    }
 
     function _drainAllBut(uint256 keepUsd6) internal {
         // Distribute the retained value over the stocks, proportional to price.

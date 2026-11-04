@@ -31,7 +31,7 @@ contract EntropyForkTest is Test {
 
         address provider = IEntropyV2(TESTNET_ENTROPY).getDefaultProvider();
         assertTrue(provider != address(0), "default provider");
-        assertGt(IEntropyV2(TESTNET_ENTROPY).getFeeV2(800_000), 0, "live fee");
+        assertGt(IEntropyV2(TESTNET_ENTROPY).getFeeV2(1_200_000), 0, "live fee");
 
         MockUSDC usdc = new MockUSDC();
         MockStock tsla = new MockStock("Tesla xStock", "TSLAx");

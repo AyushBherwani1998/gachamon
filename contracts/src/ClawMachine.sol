@@ -158,7 +158,7 @@ contract ClawMachine is IEntropyConsumer, Ownable, ReentrancyGuard {
         commonValue = 730_000; // 0.73 USD
         legendaryValue = 10_000_000; // 10 USD
         legendaryBps = 200; // 2%
-        callbackGasLimit = 800_000;
+        callbackGasLimit = 1_200_000;
         maxPriceAge = 900; // 15 minutes
     }
 

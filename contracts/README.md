@@ -116,8 +116,8 @@ sets keeper = deployer, and writes `deployments/monad-testnet.json`.
 
 Pyth Entropy V2 is at `0x825c0390f379C631f3Cf11A82a37D20BddF93c07` on Monad **testnet**
 (mainnet uses `0xD458261E832415CFd3BAE5E416FdF3230ce6F134`; they are different deployments).
-The testnet fee is dynamic and currently ~0.128 MON for an 800k callback, not 1 wei. Always
-read `getFee()` / `getFeeV2(callbackGasLimit)` before pulling.
+The testnet fee is dynamic and currently ~0.154 MON for a 1.2M callback (mainnet ~1.48 MON).
+Always read `getFee()` / `getFeeV2(callbackGasLimit)` before pulling.
 
 The deploy simulation uses ~8M gas (~1.7 testnet MON at current gas prices), so fund the deployer
 with at least 2 testnet MON before broadcasting.
@@ -162,7 +162,7 @@ Pull once from the CLI to sanity check the deployment:
 ```bash
 cast call <ClawMachine> "canPull()(bool)" --rpc-url monad_testnet
 FEE=$(cast call <ClawMachine> "getFee()(uint256)" --rpc-url monad_testnet | awk '{print $1}')
-echo "entropy fee: $FEE wei"   # ~0.128 MON for 800k gas on testnet
+echo "entropy fee: $FEE wei"   # ~0.154 MON for 1.2M gas on testnet
 cast send <MockUSDC> "approve(address,uint256)" <ClawMachine> 1000000 \
   --rpc-url monad_testnet --account player
 cast send <ClawMachine> "pull()" --value "$FEE" --rpc-url monad_testnet --account player
@@ -328,7 +328,7 @@ Frontend/keeper should import `abi/ClawMachine.json`. Read state through views (
 ## Contract notes
 
 - Math: `pullPrice 1_000_000`, `commonValue 730_000`, `legendaryValue 10_000_000`,
-  `legendaryBps 200`, `callbackGasLimit 800_000`, `maxPriceAge 900`.
+  `legendaryBps 200`, `callbackGasLimit 1_200_000`, `maxPriceAge 900`.
 - `pull()` is `nonReentrant`; `withdrawOwed()` is `nonReentrant`.
 - Pull ids start at 1. `getRecentPulls(count)` returns the newest-first ids of the last 20 resolved
   pulls (ring buffer, not event logs).
@@ -339,9 +339,10 @@ Frontend/keeper should import `abi/ClawMachine.json`. Read state through views (
   reserved for a pending USDC shortfall. Keep enough USDC in the machine for rare shortfalls.
 - Inventory is not segregated per player; `reservedValueUsd6` is an accounting reservation for
   pending legendary payouts.
-- Callback cost measured in tests: ~224k gas for a one-stock common pull, ~440k for a legendary
-  pull that touches all four stocks (default limit 800k). Monad charges gas on the limit, so keep
-  `callbackGasLimit` close to real usage.
+- Callback cost measured cold (`vm.cool`) in tests: ~256k gas for a one-stock common pull, ~514k
+  for a legendary pull that touches all four stocks. Monad cold account access is ~4x Ethereum,
+  so the default `callbackGasLimit` is 1_200_000 to leave headroom (~800k on Monad). Monad charges
+  gas on the limit, so keep it close to real usage.
 
 ## Security / trust model
 
