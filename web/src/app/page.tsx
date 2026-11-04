@@ -30,7 +30,7 @@ import { formatMon, formatUsd6 } from "@/lib/format";
 import { toGachaResult, toPanelPayouts, usdPlain } from "@/lib/pull-view";
 import type { PullPhase } from "@/lib/types";
 
-const BUSY_PHASES: PullPhase[] = ["approving", "confirming", "drawing"];
+const BUSY_PHASES: PullPhase[] = ["preparing", "approving", "confirming", "drawing"];
 
 const SITE_URL =
   process.env.NEXT_PUBLIC_SITE_URL?.trim() || "http://localhost:3000";
@@ -77,6 +77,7 @@ export default function Home() {
   const usdcReady = demo || isDeployed(deployment.usdc);
   const machineReady = demo || (machine.isDeployed && machine.pullable);
   const pullPriceLabel = `Pull · ${usdPlain(machine.pullPrice ?? 1_000_000n)} USDC`;
+  const gachaPhase = pull.phase === "preparing" ? "confirming" : pull.phase;
 
   const gachaResult = pull.result
     ? toGachaResult(
@@ -95,6 +96,7 @@ export default function Home() {
       return pull.phase === "revealed" ? "Pull again" : pullPriceLabel;
     }
     if (busy) {
+      if (pull.phase === "preparing") return "Preparing pull…";
       if (pull.phase === "approving") return "Approving USDC…";
       if (pull.phase === "confirming") return "Confirm in wallet…";
       return pull.slow ? "Still drawing…" : "Drawing…";
@@ -170,6 +172,7 @@ export default function Home() {
   };
 
   const liveMessage = useMemo(() => {
+    if (pull.phase === "preparing") return "Fetching a fresh Pyth price update.";
     if (pull.phase === "approving") return "Approving USDC. Confirm the approval in your wallet.";
     if (pull.phase === "confirming") return "Confirm the pull transaction in your wallet.";
     if (pull.phase === "drawing") {
@@ -200,7 +203,7 @@ export default function Home() {
           <section className="flex flex-col items-center gap-5">
             <div className="mx-auto w-full min-w-0 max-w-[480px]">
               <PixelGachaMachine
-                phase={pull.phase}
+                phase={gachaPhase}
                 result={gachaResult}
                 onRevealed={() => setRevealed(true)}
               />

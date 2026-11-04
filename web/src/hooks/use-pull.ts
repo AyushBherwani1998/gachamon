@@ -130,6 +130,7 @@ export function usePull(): PullState {
     setPullId(null);
     setTxHash(null);
     setSlow(false);
+    setPhase("preparing");
 
     try {
       // 1. Fresh signed Pyth update from the server proxy (key stays server-side).
