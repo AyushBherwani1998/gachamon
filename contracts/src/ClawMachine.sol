@@ -80,6 +80,12 @@ contract ClawMachine is IEntropyConsumer, Ownable, ReentrancyGuard {
     mapping(uint256 => Pull) private _pulls;
     mapping(uint64 => uint256) private _pullIdBySequence;
     mapping(uint256 => uint256) private _pullReservedValue;
+
+    // Per-pull config snapshots: setPullConfig must not change in-flight pulls.
+    mapping(uint256 => uint256) private _pullCommonValue;
+    mapping(uint256 => uint256) private _pullLegendaryValue;
+    mapping(uint256 => uint16) private _pullLegendaryBps;
+    mapping(uint256 => uint256) private _pullPrice;
     mapping(uint256 => address[]) private _pullStocks;
     mapping(uint256 => uint256[]) private _pullAmounts;
 
@@ -169,6 +175,12 @@ contract ClawMachine is IEntropyConsumer, Ownable, ReentrancyGuard {
 
         pullId = ++totalPulls;
 
+        // Snapshot the configuration so later owner changes do not affect this pull.
+        _pullCommonValue[pullId] = commonValue;
+        _pullLegendaryValue[pullId] = legendaryValue;
+        _pullLegendaryBps[pullId] = legendaryBps;
+        _pullPrice[pullId] = pullPrice;
+
         // Reserve the maximum possible payout for this pull.
         uint256 reserved = legendaryValue;
         _pullReservedValue[pullId] = reserved;
@@ -247,8 +259,8 @@ contract ClawMachine is IEntropyConsumer, Ownable, ReentrancyGuard {
         if (currentPull.status != PullStatus.Pending) return;
 
         address player = currentPull.player;
-        bool legendary = uint256(randomNumber) % BPS_DENOMINATOR < legendaryBps;
-        uint256 value = legendary ? legendaryValue : commonValue;
+        bool legendary = uint256(randomNumber) % BPS_DENOMINATOR < _pullLegendaryBps[pullId];
+        uint256 value = legendary ? _pullLegendaryValue[pullId] : _pullCommonValue[pullId];
 
         // Release the inventory reservation before any external call.
         uint256 reserved = _pullReservedValue[pullId];

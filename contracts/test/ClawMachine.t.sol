@@ -634,6 +634,38 @@ contract ClawMachineTest is Test {
         machine.setPullConfig(1, 1, 1, 10_001);
     }
 
+    function testLegendaryConfigSnapshotAppliesToPendingPull() public {
+        uint256 pullId = _pull(PLAYER, machine.getFee());
+
+        // New config would make the pull common and tiny if it were read at callback time.
+        machine.setPullConfig(2_000_000, 1, 1, 0);
+
+        _resolve(pullId, LEGENDARY_RANDOM);
+
+        ClawMachine.Pull memory p = machine.getPull(pullId);
+        assertTrue(p.legendary, "snapshot bps");
+        assertEq(p.valueUsd6, 10_000_000, "snapshot legendary value");
+
+        (address[] memory payoutStocks, uint256[] memory amounts) = machine.getPullPayout(pullId);
+        assertApproxEqAbs(_usdValue(payoutStocks, amounts), 10_000_000, 4, "snapshot payout");
+    }
+
+    function testCommonConfigSnapshotAppliesToPendingPull() public {
+        uint256 pullId = _pull(PLAYER, machine.getFee());
+
+        // New config would make the pull legendary with a 1 USD payout if read at callback time.
+        machine.setPullConfig(2_000_000, 1_000_000, 1_000_000, 10_000);
+
+        _resolve(pullId, COMMON_RANDOM);
+
+        ClawMachine.Pull memory p = machine.getPull(pullId);
+        assertFalse(p.legendary, "snapshot bps");
+        assertEq(p.valueUsd6, 730_000, "snapshot common value");
+
+        (address[] memory payoutStocks, uint256[] memory amounts) = machine.getPullPayout(pullId);
+        assertApproxEqAbs(_usdValue(payoutStocks, amounts), 730_000, 4, "snapshot payout");
+    }
+
     function testOwnerCanWithdrawUsdcAndStock() public {
         usdc.mint(address(machine), 5_000_000);
         uint256 usdcBefore = usdc.balanceOf(TREASURY);
