@@ -94,8 +94,8 @@ pending contracts fix:
 - `_entropyCallback(...)` (the IEntropyConsumer entry point; the web never calls it)
 
 The fixed contract also has an owner-only `refundStuckPull` for pulls whose
-callback never lands. There is no player-facing refund action: a stuck pull is
-reported on the explorer and the player can retry.
+callback never lands. There is no player-facing refund action: if a callback
+does not arrive, the pull stays pending on-chain and the owner can refund it.
 
 The retired interface (`pull()` with no args, `getFee`, `getRecentPulls`,
 `getPull`, `getStocks`, `owed`, keeper `setPrices`) is not used anywhere.
