@@ -95,10 +95,7 @@ contract ClawMachine is IEntropyConsumer, Ownable, ReentrancyGuard {
     // ---------------------------------------------------------------------
 
     event PullRequested(
-        uint256 indexed pullId,
-        address indexed player,
-        uint64 sequenceNumber,
-        uint256 feePaid
+        uint256 indexed pullId, address indexed player, uint64 sequenceNumber, uint256 feePaid
     );
     event PullResolved(
         uint256 indexed pullId,
@@ -111,10 +108,7 @@ contract ClawMachine is IEntropyConsumer, Ownable, ReentrancyGuard {
     );
     event PricesUpdated(address[] stocks, uint256[] pricesUsd6, uint256 timestamp);
     event PayoutOwed(
-        uint256 indexed pullId,
-        address indexed player,
-        address indexed stock,
-        uint256 amount
+        uint256 indexed pullId, address indexed player, address indexed stock, uint256 amount
     );
     event OwedWithdrawn(address indexed player, address indexed token, uint256 amount);
 
@@ -240,11 +234,7 @@ contract ClawMachine is IEntropyConsumer, Ownable, ReentrancyGuard {
     }
 
     /// @dev Called by the Entropy contract after the random number is revealed.
-    function entropyCallback(
-        uint64 sequence,
-        address,
-        bytes32 randomNumber
-    ) internal override {
+    function entropyCallback(uint64 sequence, address, bytes32 randomNumber) internal override {
         uint256 pullId = _pullIdBySequence[sequence];
         if (pullId == 0) return;
 
@@ -264,12 +254,8 @@ contract ClawMachine is IEntropyConsumer, Ownable, ReentrancyGuard {
             reservedValueUsd6 = 0;
         }
 
-        (address[] memory payoutStocks, uint256[] memory payoutAmounts) = _allocatePayout(
-            player,
-            pullId,
-            value,
-            randomNumber
-        );
+        (address[] memory payoutStocks, uint256[] memory payoutAmounts) =
+            _allocatePayout(player, pullId, value, randomNumber);
 
         currentPull.status = PullStatus.Resolved;
         currentPull.legendary = legendary;
@@ -281,13 +267,7 @@ contract ClawMachine is IEntropyConsumer, Ownable, ReentrancyGuard {
         _pushRecentPull(pullId);
 
         emit PullResolved(
-            pullId,
-            player,
-            legendary,
-            payoutStocks,
-            payoutAmounts,
-            value,
-            randomNumber
+            pullId, player, legendary, payoutStocks, payoutAmounts, value, randomNumber
         );
     }
 
@@ -309,12 +289,8 @@ contract ClawMachine is IEntropyConsumer, Ownable, ReentrancyGuard {
 
             for (uint256 i = 0; i < stockCount && remaining > 0; ++i) {
                 address stock = _stocks[(start + i) % stockCount];
-                (uint256 amount, uint256 paid) = _allocateFromStock(
-                    player,
-                    pullId,
-                    stock,
-                    remaining
-                );
+                (uint256 amount, uint256 paid) =
+                    _allocateFromStock(player, pullId, stock, remaining);
                 if (amount == 0) continue;
 
                 remaining = paid >= remaining ? 0 : remaining - paid;
@@ -375,9 +351,8 @@ contract ClawMachine is IEntropyConsumer, Ownable, ReentrancyGuard {
 
     /// @dev Low-level ERC20 transfer that returns false instead of reverting.
     function _tryTransfer(address token, address to, uint256 amount) private returns (bool) {
-        (bool success, bytes memory data) = token.call(
-            abi.encodeWithSelector(IERC20.transfer.selector, to, amount)
-        );
+        (bool success, bytes memory data) =
+            token.call(abi.encodeWithSelector(IERC20.transfer.selector, to, amount));
         if (!success) return false;
         if (data.length == 0) return true;
         if (data.length != 32) return false;
@@ -444,9 +419,11 @@ contract ClawMachine is IEntropyConsumer, Ownable, ReentrancyGuard {
         return _pulls[pullId];
     }
 
-    function getPullPayout(
-        uint256 pullId
-    ) external view returns (address[] memory stocks, uint256[] memory amounts) {
+    function getPullPayout(uint256 pullId)
+        external
+        view
+        returns (address[] memory stocks, uint256[] memory amounts)
+    {
         return (_pullStocks[pullId], _pullAmounts[pullId]);
     }
 
@@ -466,10 +443,7 @@ contract ClawMachine is IEntropyConsumer, Ownable, ReentrancyGuard {
     // Keeper
     // ---------------------------------------------------------------------
 
-    function setPrices(
-        address[] calldata stocks,
-        uint256[] calldata pricesUsd6
-    ) external {
+    function setPrices(address[] calldata stocks, uint256[] calldata pricesUsd6) external {
         require(msg.sender == keeper, "not keeper");
         require(stocks.length == pricesUsd6.length, "length mismatch");
         require(stocks.length > 0, "empty");

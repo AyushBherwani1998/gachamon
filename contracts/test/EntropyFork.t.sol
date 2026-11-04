@@ -45,13 +45,8 @@ contract EntropyForkTest is Test {
         stocks[2] = address(nvda);
         stocks[3] = address(spy);
 
-        ClawMachine machine = new ClawMachine(
-            address(usdc),
-            TESTNET_ENTROPY,
-            stocks,
-            address(this),
-            address(this)
-        );
+        ClawMachine machine =
+            new ClawMachine(address(usdc), TESTNET_ENTROPY, stocks, address(this), address(this));
 
         uint256[] memory prices = new uint256[](4);
         prices[0] = 250_000_000;

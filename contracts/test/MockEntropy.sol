@@ -54,26 +54,29 @@ contract MockEntropy is IEntropyV2 {
         consumerOf[assignedSequenceNumber] = msg.sender;
     }
 
-    function requestV2(
-        address,
-        bytes32,
-        uint32
-    ) external payable returns (uint64 assignedSequenceNumber) {
+    function requestV2(address, bytes32, uint32)
+        external
+        payable
+        returns (uint64 assignedSequenceNumber)
+    {
         require(msg.value >= fee, "MockEntropy: insufficient fee");
         assignedSequenceNumber = nextSequenceNumber++;
         consumerOf[assignedSequenceNumber] = msg.sender;
     }
 
-    function getProviderInfoV2(
-        address
-    ) external pure returns (EntropyStructsV2.ProviderInfo memory info) {
+    function getProviderInfoV2(address)
+        external
+        pure
+        returns (EntropyStructsV2.ProviderInfo memory info)
+    {
         return info;
     }
 
-    function getRequestV2(
-        address,
-        uint64
-    ) external pure returns (EntropyStructsV2.Request memory request) {
+    function getRequestV2(address, uint64)
+        external
+        pure
+        returns (EntropyStructsV2.Request memory request)
+    {
         return request;
     }
 

@@ -8,10 +8,10 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 contract MockStock is ERC20, Ownable {
     bool public transfersBlocked;
 
-    constructor(
-        string memory name_,
-        string memory symbol_
-    ) ERC20(name_, symbol_) Ownable(msg.sender) {}
+    constructor(string memory name_, string memory symbol_)
+        ERC20(name_, symbol_)
+        Ownable(msg.sender)
+    {}
 
     function decimals() public pure override returns (uint8) {
         return 18;
@@ -27,10 +27,7 @@ contract MockStock is ERC20, Ownable {
     }
 
     function _update(address from, address to, uint256 value) internal override {
-        require(
-            !transfersBlocked || from == address(0) || to == address(0),
-            "transfers blocked"
-        );
+        require(!transfersBlocked || from == address(0) || to == address(0), "transfers blocked");
         super._update(from, to, value);
     }
 }

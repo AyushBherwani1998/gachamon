@@ -129,7 +129,11 @@ contract ClawMachineTest is Test {
         }
     }
 
-    function _usdValue(address[] memory tokens, uint256[] memory amounts) internal view returns (uint256 total) {
+    function _usdValue(address[] memory tokens, uint256[] memory amounts)
+        internal
+        view
+        returns (uint256 total)
+    {
         for (uint256 i = 0; i < tokens.length; ++i) {
             total += (amounts[i] * _priceOf(tokens[i])) / 1e18;
         }
@@ -451,10 +455,8 @@ contract ClawMachineTest is Test {
 
         vm.startPrank(STRANGER);
 
-        bytes memory authError = abi.encodeWithSelector(
-            Ownable.OwnableUnauthorizedAccount.selector,
-            STRANGER
-        );
+        bytes memory authError =
+            abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, STRANGER);
         vm.expectRevert(authError);
         machine.setKeeper(STRANGER);
 

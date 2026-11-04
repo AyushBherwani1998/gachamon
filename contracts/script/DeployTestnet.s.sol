@@ -71,13 +71,7 @@ contract DeployTestnet is Script {
         console.log("ClawMachine constructor args (ABI encoded, no 0x):");
         console.logBytes(abi.encode(address(usdc), ENTROPY, stocks, deployer, deployer));
 
-        _writeDeployment(
-            address(usdc),
-            address(machine),
-            stocks,
-            prices,
-            deployer
-        );
+        _writeDeployment(address(usdc), address(machine), stocks, prices, deployer);
     }
 
     function _writeDeployment(
