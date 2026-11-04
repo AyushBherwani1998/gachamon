@@ -49,11 +49,11 @@ export async function fetchBackendPulls(
   return body.pulls.flatMap((pull) => {
     if (!pull.resolved) return [];
     const id = BigInt(pull.pullId);
-    const stocks = (pull.stocks ?? []).map((address, index) => ({
-      address: address as Address,
-      symbol: shortAddress(address),
-      amount: BigInt(pull.amounts?.[index] ?? "0"),
-    }));
+    const stocks = (pull.stocks ?? []).flatMap((address, index) => {
+      const amount = BigInt(pull.amounts?.[index] ?? "0");
+      if (amount === 0n) return [];
+      return [{ address: address as Address, symbol: shortAddress(address), amount }];
+    });
     return [
       {
         id,
