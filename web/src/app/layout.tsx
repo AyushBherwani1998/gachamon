@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import type { ReactNode } from "react";
 import "@fontsource/press-start-2p/400.css";
 
 import { Providers } from "./providers";
@@ -25,7 +26,7 @@ export const viewport: Viewport = {
   themeColor: "#0b0b12",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html
       lang="en"
