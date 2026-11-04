@@ -318,9 +318,11 @@ export default function Home() {
             items={feed.items}
             loading={feed.loading}
             error={
-              notDeployed
-                ? `ClawMachine is not deployed on ${deployment.name} yet.`
-                : feed.error ?? undefined
+              feed.items.length > 0
+                ? undefined
+                : notDeployed
+                  ? `ClawMachine is not deployed on ${deployment.name} yet.`
+                  : feed.error ?? undefined
             }
             explorerBase={deployment.explorerUrl}
           />
