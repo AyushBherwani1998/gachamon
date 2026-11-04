@@ -77,6 +77,7 @@ contract Deploy is Script {
         }
 
         if (callbackGasLimit != 0) {
+            require(callbackGasLimit <= 1_500_000, "Invalid gas limit");
             claw.setCallbackGasLimit(uint32(callbackGasLimit));
         }
 
