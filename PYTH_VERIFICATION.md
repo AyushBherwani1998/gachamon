@@ -130,7 +130,7 @@ Run from `contracts/`:
 
 ```
 forge test
-# 20 passed, 0 failed (fork suite skipped without MONAD_RPC)
+# 26 passed, 0 failed (fork suite skipped without MONAD_RPC)
 
 MONAD_RPC=https://rpc.monad.xyz ...
 forge test --match-contract ClawMachineForkTest -vv
