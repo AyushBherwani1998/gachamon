@@ -111,7 +111,14 @@ export default function Home() {
     if (machine.isLoading) return "Checking machine…";
     if (machine.paused) return "Machine paused";
     if (machine.error && machine.inventoryValueUsd6 === undefined) return "Price feed offline";
-    if (!machine.pullable) return "Machine refilling";
+    if (!machine.pullable) {
+      const shortInventory =
+        machine.inventoryValueUsd6 !== undefined &&
+        machine.legendaryPayout !== undefined &&
+        machine.inventoryValueUsd6 <
+          machine.legendaryPayout + (machine.reservedValueUsd6 ?? 0n);
+      return shortInventory ? "Machine refilling" : "Machine unavailable";
+    }
     if (pull.phase === "revealed") return "Pull again";
     if (pull.phase === "error") return "Try again";
     if (insufficientUsdc) return "Not enough USDC";
@@ -131,6 +138,8 @@ export default function Home() {
     machine.paused,
     machine.error,
     machine.inventoryValueUsd6,
+    machine.legendaryPayout,
+    machine.reservedValueUsd6,
     machine.pullable,
     pull.phase,
     pull.slow,
