@@ -17,21 +17,24 @@ const ACCENTS = {
     frame: "border-amber-600/50 bg-amber-300/[0.18]",
     badge: "bg-amber-300 text-amber-950",
     strip: "bg-amber-300",
+    label: "Legendary",
   },
   common: {
     text: "text-sky-800",
     frame: "border-sky-600/40 bg-sky-300/[0.12]",
     badge: "bg-sky-400 text-sky-950",
     strip: "bg-sky-400",
+    label: "Common",
   },
 } as const;
 
 function buildShareText(payouts: PanelPayout[]) {
   const pulled = payouts.length
     ? payouts.map((p) => `${p.amount} ${p.symbol}`).join(" + ")
-    : "a real stock";
+    : "real stocks";
 
-  return `I just pulled ${pulled} from a Gachamon pack on @monad. Real stocks, verifiable randomness by Pyth. #MonadBlitz ${SHARE_MENTIONS}`;
+  const stockWord = payouts.length === 1 ? "stock" : "stocks";
+  return `I just pulled ${payouts.length} ${stockWord} (${pulled}) from a Gachamon pack on @monad. Real tokenized stocks, verifiable randomness by Pyth. #MonadBlitz ${SHARE_MENTIONS}`;
 }
 
 export function ResultCard({
@@ -72,7 +75,7 @@ export function ResultCard({
                 name={legendary ? "crown" : "spark"}
                 className="size-2.5"
               />
-              {legendary ? "Legendary" : "Rare"}
+              {accent.label}
             </span>
           }
         />
@@ -184,7 +187,7 @@ export function ResultCard({
           ) : (
             <div className="flex min-h-11 items-center justify-center gap-2 px-2">
               <PanelTag tone={legendary ? "gold" : "live"}>
-                {legendary ? "Legendary pull" : "Rare pull"}
+                {accent.label} pull
               </PanelTag>
               <span className="font-mono text-[10px] text-muted-foreground">
                 verifiable by Pyth Entropy
